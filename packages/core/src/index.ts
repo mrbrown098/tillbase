@@ -18,5 +18,7 @@ export type {
 } from "./sales.js";
 export { ReportService } from "./reports.js";
 export type { SalesSummary } from "./reports.js";
+export { SettingsService, defaultSettings } from "./settings.js";
+export type { ShopSettings } from "./settings.js";
 export { formatReceipt } from "./receipt.js";
 export type { ReceiptOptions } from "./receipt.js";

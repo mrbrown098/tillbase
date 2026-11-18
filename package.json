@@ -10,7 +10,9 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "app": "npm run build -w @tillbase/core && npm run rebuild -w @tillbase/desktop && npm run start -w @tillbase/desktop",
+    "rebuild:node": "npm rebuild better-sqlite3"
   },
   "engines": {
     "node": ">=20"

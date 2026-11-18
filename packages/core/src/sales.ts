@@ -317,6 +317,14 @@ export class SaleService {
     };
   }
 
+  /** Most recent sales first, including voided ones. */
+  recent(limit = 50): Sale[] {
+    const ids = this.db
+      .prepare("SELECT id FROM sales ORDER BY created_at DESC, rowid DESC LIMIT ?")
+      .all(limit) as { id: string }[];
+    return ids.map((r) => this.mustGet(r.id));
+  }
+
   findByReceiptNo(receiptNo: string): Sale | undefined {
     const row = this.db
       .prepare("SELECT id FROM sales WHERE receipt_no = ?")

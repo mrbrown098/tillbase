@@ -10,6 +10,15 @@ export interface ReceiptOptions {
   footer?: string;
 }
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** "2026-11-18 17:25" in the machine's local time (stored times are UTC). */
+function localStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
 function row(left: string, right: string, width: number): string {
   const space = Math.max(1, width - left.length - right.length);
   return left + " ".repeat(space) + right;
@@ -25,7 +34,7 @@ export function formatReceipt(sale: Sale, opts: ReceiptOptions): string {
   out.push(opts.storeName.slice(0, width));
   out.push(line);
   out.push(`Receipt: ${sale.receiptNo}`);
-  out.push(`Date:    ${sale.createdAt.replace("T", " ").slice(0, 16)}`);
+  out.push(`Date:    ${localStamp(sale.createdAt)}`);
   if (sale.cashier) out.push(`Cashier: ${sale.cashier}`);
   if (sale.status === "void") out.push("*** VOID ***");
   out.push(line);

@@ -24,6 +24,18 @@ export class InventoryService {
     return row.qty;
   }
 
+  /** Current stock for every product that has at least one movement. */
+  stockLevels(): Record<string, number> {
+    const rows = this.db
+      .prepare(
+        "SELECT product_id AS id, SUM(qty_delta) AS qty FROM stock_movements GROUP BY product_id",
+      )
+      .all() as { id: string; qty: number }[];
+    const out: Record<string, number> = {};
+    for (const r of rows) out[r.id] = r.qty;
+    return out;
+  }
+
   /** Add (positive) or remove (negative) stock with a reason such as "purchase" or "damage". */
   adjust(
     productId: string,
