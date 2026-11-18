@@ -4,6 +4,7 @@ import {
   ProductService,
   ReportService,
   SaleService,
+  SettingsService,
   formatReceipt,
   openDatabase,
   taxFor,
@@ -225,6 +226,42 @@ describe("inventory", () => {
   });
 });
 
+describe("stock levels, recent sales and settings", () => {
+  it("returns stock for all products at once", () => {
+    const a = stocked("A", 100, 7);
+    const b = stocked("B", 100, 3);
+    sales.checkout({
+      lines: [{ productId: a.id, qty: 2 }],
+      payments: [{ method: "cash", amountMinor: 200 }],
+    });
+    expect(inventory.stockLevels()).toEqual({ [a.id]: 5, [b.id]: 3 });
+  });
+
+  it("lists recent sales newest first, including voids", () => {
+    const p = stocked("P", 100, 10);
+    const pay = [{ method: "cash" as const, amountMinor: 100 }];
+    const s1 = sales.checkout({ lines: [{ productId: p.id, qty: 1 }], payments: pay });
+    const s2 = sales.checkout({ lines: [{ productId: p.id, qty: 1 }], payments: pay });
+    sales.voidSale(s1.id, "oops");
+    const recent = sales.recent();
+    expect(recent.map((s) => s.id)).toEqual([s2.id, s1.id]);
+    expect(recent[1]?.status).toBe("void");
+    expect(sales.recent(1)).toHaveLength(1);
+  });
+
+  it("stores and validates settings", () => {
+    const settings = new SettingsService(db);
+    expect(settings.get().storeName).toBe("My Shop");
+    const next = settings.update({ storeName: "  Corner Shop ", currency: "pkr" });
+    expect(next.storeName).toBe("Corner Shop");
+    expect(next.currency).toBe("PKR");
+    expect(settings.get().receiptWidth).toBe(32);
+    expect(() => settings.update({ storeName: " " })).toThrow(/Store name/);
+    expect(() => settings.update({ currency: "DOLLARS" })).toThrow(/Currency/);
+    expect(() => settings.update({ receiptWidth: 5 })).toThrow(/width/);
+  });
+});
+
 describe("reports and receipts", () => {
   it("summarises sales, voids and payment methods", () => {
     const a = stocked("Apple", 100, 50);
@@ -244,6 +281,22 @@ describe("reports and receipts", () => {
     expect(r.byMethod).toEqual({ cash: 300, card: 200 });
     expect(r.topProducts[0]).toMatchObject({ name: "Apple", qty: 5 });
     expect(s2.status).toBe("completed");
+  });
+
+  it("prints the receipt time in local time, not UTC", () => {
+    const p = stocked("Clock", 100, 1);
+    const sale = sales.checkout({
+      lines: [{ productId: p.id, qty: 1 }],
+      payments: [{ method: "cash", amountMinor: 100 }],
+    });
+    const d = new Date("2026-11-18T12:25:00.000Z");
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    const expected = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    const text = formatReceipt(
+      { ...sale, createdAt: "2026-11-18T12:25:00.000Z" },
+      { storeName: "Shop" },
+    );
+    expect(text).toContain(`Date:    ${expected}`);
   });
 
   it("prints a readable receipt", () => {
