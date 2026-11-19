@@ -44,3 +44,4 @@ export type {
 export * as dates from "./dates.js";
 export { FinanceService } from "./finance.js";
 export type { BreakdownLine, DailyPoint, ItemProfit, ProfitAndLoss } from "./finance.js";
+export { backupDatabase } from "./backup.js";

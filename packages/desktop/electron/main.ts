@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { openDatabase } from "@tillbase/core";
+import { backupDatabase, openDatabase } from "@tillbase/core";
 import { channels, type IpcResult, type TillbaseApi } from "../shared/api.js";
 import { createHandlers } from "./handlers.js";
 
@@ -58,8 +58,16 @@ function createWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
-  const db = openDatabase(databasePath());
-  registerIpc(createHandlers(db));
+  const path = databasePath();
+  const db = openDatabase(path);
+  // Daily copies of the shop's data, kept next to it. Skipped for in-memory test databases.
+  const backupDir = join(dirname(path), "backups");
+  const backup = () => backupDatabase(db, backupDir);
+  const quietBackup = () => {
+    if (path !== ":memory:") backup().catch((e) => console.error("Backup failed:", e));
+  };
+  quietBackup();
+  registerIpc(createHandlers(db, "T1", Date.now, { backup, afterShiftClose: quietBackup }));
   createWindow();
 
   app.on("activate", () => {
