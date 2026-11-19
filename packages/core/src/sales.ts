@@ -24,6 +24,9 @@ export interface CheckoutInput {
   cashier?: string;
   /** Allow selling more than is in stock. Default: false. */
   allowNegativeStock?: boolean;
+  /** The open shift this sale belongs to, and who rang it up. */
+  shiftId?: string;
+  userId?: string;
 }
 
 export interface SaleItem {
@@ -56,6 +59,8 @@ export interface Sale {
   changeMinor: number;
   cashier: string | null;
   voidReason: string | null;
+  shiftId: string | null;
+  userId: string | null;
   createdAt: string;
   voidedAt: string | null;
   items: SaleItem[];
@@ -173,8 +178,9 @@ export class SaleService {
       this.db
         .prepare(
           `INSERT INTO sales (id, receipt_no, status, subtotal_minor, discount_minor,
-             tax_minor, total_minor, paid_minor, change_minor, cashier, created_at)
-           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?)`,
+             tax_minor, total_minor, paid_minor, change_minor, cashier, created_at,
+             shift_id, user_id)
+           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           saleId,
@@ -187,6 +193,8 @@ export class SaleService {
           change,
           input.cashier ?? null,
           now,
+          input.shiftId ?? null,
+          input.userId ?? null,
         );
 
       const insItem = this.db.prepare(
@@ -310,6 +318,8 @@ export class SaleService {
       changeMinor: s.change_minor as number,
       cashier: (s.cashier as string | null) ?? null,
       voidReason: (s.void_reason as string | null) ?? null,
+      shiftId: (s.shift_id as string | null) ?? null,
+      userId: (s.user_id as string | null) ?? null,
       createdAt: s.created_at as string,
       voidedAt: (s.voided_at as string | null) ?? null,
       items,

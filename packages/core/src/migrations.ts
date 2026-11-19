@@ -99,6 +99,50 @@ export const migrations: Migration[] = [
       CREATE INDEX idx_payments_sale ON payments(sale_id);
     `,
   },
+  {
+    version: 2,
+    sql: `
+      CREATE TABLE users (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        role       TEXT NOT NULL CHECK (role IN ('owner', 'manager', 'cashier')),
+        pin_salt   TEXT NOT NULL,
+        pin_hash   TEXT NOT NULL,
+        active     INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_users_name ON users(lower(name));
+
+      CREATE TABLE shifts (
+        id                  TEXT PRIMARY KEY,
+        user_id             TEXT NOT NULL REFERENCES users(id),
+        opened_at           TEXT NOT NULL,
+        closed_at           TEXT,
+        opening_cash_minor  INTEGER NOT NULL CHECK (opening_cash_minor >= 0),
+        counted_cash_minor  INTEGER,
+        expected_cash_minor INTEGER,
+        variance_minor      INTEGER,
+        note                TEXT,
+        status              TEXT NOT NULL CHECK (status IN ('open', 'closed'))
+      );
+      -- At most one open shift (one till). Multi-terminal support will scope this per terminal.
+      CREATE UNIQUE INDEX idx_one_open_shift ON shifts(status) WHERE status = 'open';
+
+      CREATE TABLE cash_movements (
+        id           TEXT PRIMARY KEY,
+        shift_id     TEXT NOT NULL REFERENCES shifts(id),
+        user_id      TEXT NOT NULL REFERENCES users(id),
+        amount_minor INTEGER NOT NULL CHECK (amount_minor <> 0),
+        reason       TEXT NOT NULL,
+        created_at   TEXT NOT NULL
+      );
+      CREATE INDEX idx_cash_movements_shift ON cash_movements(shift_id);
+
+      ALTER TABLE sales ADD COLUMN shift_id TEXT REFERENCES shifts(id);
+      ALTER TABLE sales ADD COLUMN user_id TEXT REFERENCES users(id);
+      CREATE INDEX idx_sales_shift ON sales(shift_id);
+    `,
+  },
 ];
 
 /** Apply any migrations that have not run yet. Safe to call on every start. */

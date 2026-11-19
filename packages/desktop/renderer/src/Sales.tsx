@@ -6,7 +6,7 @@ import { formatDateTime, todayRange } from "./format";
 import { Modal, ReceiptView } from "./Modal";
 
 export function Sales() {
-  const { money, toast } = useApp();
+  const { money, toast, can } = useApp();
   const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
   const [viewing, setViewing] = useState<{ sale: Sale; text: string } | null>(null);
@@ -15,13 +15,16 @@ export function Sales() {
   const load = useCallback(async () => {
     try {
       const { from, to } = todayRange();
-      const [s, r] = await Promise.all([api.salesSummary(from, to), api.recentSales(50)]);
+      const [s, r] = await Promise.all([
+        can("reports.view") ? api.salesSummary(from, to) : Promise.resolve(null),
+        api.recentSales(50),
+      ]);
       setSummary(s);
       setSales(r);
     } catch (e) {
       toast((e as Error).message, "error");
     }
-  }, [toast]);
+  }, [toast, can]);
 
   useEffect(() => {
     void load();
@@ -95,7 +98,7 @@ export function Sales() {
                 <button className="btn" onClick={() => void open(s)}>
                   Receipt
                 </button>
-                {s.status === "completed" && (
+                {s.status === "completed" && can("void") && (
                   <button className="btn" onClick={() => setVoiding(s)}>
                     Void
                   </button>

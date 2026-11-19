@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { ShopSettings } from "@tillbase/core";
+import type { Permission, ShopSettings } from "@tillbase/core";
 import { formatMoney } from "@tillbase/core/money";
+import type { SessionInfo } from "../../shared/api";
 import { api } from "./api";
 
 interface Toast {
@@ -12,6 +13,10 @@ interface Toast {
 interface AppContextValue {
   settings: ShopSettings;
   setSettings: (s: ShopSettings) => void;
+  session: SessionInfo;
+  setSession: (s: SessionInfo) => void;
+  /** Whether the signed-in user may do something. The main process enforces this too. */
+  can: (permission: Permission) => boolean;
   money: (minor: number) => string;
   toast: (text: string, kind?: "ok" | "error") => void;
 }
@@ -24,6 +29,8 @@ const defaults: ShopSettings = {
   receiptWidth: 32,
 };
 
+const signedOut: SessionInfo = { needsSetup: false, user: null, permissions: [], shift: null };
+
 const Ctx = createContext<AppContextValue | null>(null);
 
 export function useApp(): AppContextValue {
@@ -34,13 +41,16 @@ export function useApp(): AppContextValue {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<ShopSettings>(defaults);
+  const [session, setSession] = useState<SessionInfo>(signedOut);
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   useEffect(() => {
-    api
-      .getSettings()
-      .then((s) => setSettings(s))
+    Promise.all([api.getSettings(), api.session()])
+      .then(([s, sess]) => {
+        setSettings(s);
+        setSession(sess);
+      })
       .catch(() => undefined)
       .finally(() => setReady(true));
   }, []);
@@ -56,10 +66,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [settings.currency, settings.locale],
   );
 
+  const can = useCallback(
+    (permission: Permission) => session.permissions.includes(permission),
+    [session.permissions],
+  );
+
   if (!ready) return null;
 
   return (
-    <Ctx.Provider value={{ settings, setSettings, money, toast }}>
+    <Ctx.Provider value={{ settings, setSettings, session, setSession, can, money, toast }}>
       {children}
       <div className="toasts" role="status" aria-live="polite">
         {toasts.map((t) => (

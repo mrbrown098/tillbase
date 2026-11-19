@@ -2,7 +2,7 @@
 
 Free, open source, offline-first point of sale for shops, supermarkets, malls and restaurants.
 
-> **Status: early development (v0.2).** The core engine and a first desktop app (checkout, products, stock, sales, settings) work and are tested. Restaurant mode, users/roles and multi-branch are still to come. See the roadmap below.
+> **Status: early development (v0.3).** The core engine and a desktop app (checkout, products, stock, sales, staff logins, shifts, settings) work and are tested. Restaurant mode, customers/loyalty and multi-branch are still to come. See [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and how Tillbase compares with paid POS products. This is not yet certified for Pakistani tax-authority integration.
 
 ## Why Tillbase
 
@@ -28,6 +28,8 @@ The `@tillbase/core` package:
 
 ## What the desktop app does
 
+- **Staff and roles:** PIN login for each person, with owner, manager and cashier roles. Cashiers can sell; discounts, voids, cash in/out, stock and reports need a manager; staff and settings need an owner. PINs are stored as salted hashes, wrong PINs lock the account for 30 seconds, and the till signs out after 5 idle minutes. Permissions are enforced in the app's main process, not just hidden in the screen.
+- **Shifts:** open with a cash float, record cash in and out, then count the drawer to close. The expected amount is hidden from cashiers until they close, so they count what is really there. Shows the difference as short, over or exact.
 - **Checkout:** scan a barcode (USB scanners work like a keyboard) or search by name, tap products, change quantities, add a per-line discount, take cash or card, show change due, print the receipt.
 - **Products:** add and edit products, tax rate, cost, barcode, reorder level and opening stock; adjust stock with a reason; low-stock highlighting.
 - **Sales:** today's totals by payment method, top products, recent sales, reprint receipts, void a sale (stock is restored).
@@ -86,7 +88,7 @@ Tax rates are in basis points: `1800` means 18.00%.
 - [x] Core engine: products, stock, sales, payments, reports, receipts
 - [x] Desktop app (Electron + React): checkout, barcode scanning, products, stock, sales, settings
 - [ ] Split payments in the checkout screen (the core already supports them)
-- [ ] Users, roles and shift/cash drawer management
+- [x] Staff PIN login, roles and permissions; shifts with cash drawer reconciliation
 - [ ] Direct receipt printing (ESC/POS thermal printers) and cash drawer kick. Today receipts print through the system print dialog.
 - [ ] Installers for Windows, macOS and Linux
 - [ ] Restaurant mode: tables, kitchen orders, split bills

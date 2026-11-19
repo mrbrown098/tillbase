@@ -6,7 +6,7 @@ import { bpToPercent, minorToInput, parseMoney, parseQty, percentToBp } from "./
 import { Modal } from "./Modal";
 
 export function Products() {
-  const { money, toast } = useApp();
+  const { money, toast, can } = useApp();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ProductWithStock[]>([]);
   const [editing, setEditing] = useState<ProductWithStock | "new" | null>(null);
@@ -90,7 +90,7 @@ export function Products() {
                   {low && <span className="badge badge-warn">low</span>}
                 </td>
                 <td className="actions">
-                  {p.trackStock && (
+                  {p.trackStock && can("stock.adjust") && (
                     <button className="btn" onClick={() => setAdjusting(p)}>
                       Adjust stock
                     </button>
