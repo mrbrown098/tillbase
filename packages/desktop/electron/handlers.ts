@@ -1,5 +1,10 @@
 import {
+  ExpenseService,
+  FinanceService,
   InventoryService,
+  LabourService,
+  PurchaseService,
+  RecipeService,
   ProductService,
   ReportService,
   SaleService,
@@ -34,6 +39,7 @@ export function createHandlers(
   db: Db,
   receiptPrefix = "T1",
   now: () => number = Date.now,
+  hooks: { backup?: () => Promise<string>; afterShiftClose?: () => void } = {},
 ): TillbaseApi {
   const products = new ProductService(db);
   const inventory = new InventoryService(db);
@@ -42,6 +48,11 @@ export function createHandlers(
   const settings = new SettingsService(db);
   const users = new UserService(db, now);
   const shifts = new ShiftService(db);
+  const recipes = new RecipeService(db);
+  const purchases = new PurchaseService(db);
+  const expenses = new ExpenseService(db);
+  const labour = new LabourService(db);
+  const finance = new FinanceService(db);
 
   let current: User | null = null;
 
@@ -105,6 +116,18 @@ export function createHandlers(
     return shift;
   };
 
+  /** Take cash for a business payment out of the open drawer, so the shift count stays honest. */
+  const drawerOut = (user: User, amountMinor: number, reason: string) => {
+    if (amountMinor <= 0) return;
+    const shift = shifts.current();
+    if (!shift) throw new Error("Open a shift to pay from the drawer");
+    try {
+      shifts.addCashMovement(shift.id, user.id, -amountMinor, reason);
+    } catch {
+      throw new Error("There is not enough cash in the drawer for that payment");
+    }
+  };
+
   return {
     // ---- Session -------------------------------------------------------
     async session() {
@@ -133,11 +156,11 @@ export function createHandlers(
     // ---- Selling -------------------------------------------------------
     async listProducts() {
       authorize("sell");
-      return withStock(products.list());
+      return withStock(products.list({ kind: "product" }));
     },
     async searchProducts(query) {
       authorize("sell");
-      return query.trim() ? withStock(products.search(query)) : withStock(products.list());
+      return query.trim() ? withStock(products.search(query)) : withStock(products.list({ kind: "product" }));
     },
     async findByBarcode(barcode) {
       authorize("sell");
@@ -223,7 +246,9 @@ export function createHandlers(
       if (shift.userId !== user.id && !can(user.role, "shifts.manage_all")) {
         throw new Error("Only the person who opened the shift, or a manager, can close it");
       }
-      return view(shifts.close(shift.id, countedCashMinor, note), user);
+      const closed = view(shifts.close(shift.id, countedCashMinor, note), user);
+      hooks.afterShiftClose?.();
+      return closed;
     },
     async recentShifts() {
       authorize("shifts.manage_all");
@@ -255,6 +280,161 @@ export function createHandlers(
     async lowStock() {
       authorize("reports.view");
       return inventory.lowStock();
+    },
+
+    // ---- Menu, ingredients and recipes --------------------------------
+    async listItems(kind = "all") {
+      authorize("products.manage");
+      if (kind === "all") return withStock([...products.list({ kind: "product" }), ...products.list({ kind: "ingredient" })]);
+      return withStock(products.list({ kind }));
+    },
+    async getRecipe(productId) {
+      authorize("products.manage");
+      return recipes.get(productId);
+    },
+    async setRecipe(productId, lines) {
+      authorize("products.manage");
+      return recipes.set(productId, lines);
+    },
+    async recipeCosts() {
+      authorize("products.manage");
+      return recipes.costs();
+    },
+
+    // ---- Purchases ------------------------------------------------------
+    async recordPurchase(input, fromDrawer = false) {
+      const user = authorize("purchases.manage");
+      return db.transaction(() => {
+        const p = purchases.record({ ...input, userId: user.id });
+        if (fromDrawer && (input.method ?? "cash") === "cash") {
+          drawerOut(user, p.paidMinor, `Purchase${p.supplier ? ` from ${p.supplier}` : ""}`);
+        }
+        return p;
+      })();
+    },
+    async payPurchase(id, amountMinor, method, fromDrawer = false) {
+      const user = authorize("purchases.manage");
+      return db.transaction(() => {
+        const p = purchases.pay(id, amountMinor, method);
+        if (fromDrawer && method === "cash") drawerOut(user, amountMinor, `Paid supplier${p.supplier ? ` ${p.supplier}` : ""}`);
+        return p;
+      })();
+    },
+    async listPurchases(onlyUnpaid = false) {
+      authorize("purchases.manage");
+      return purchases.list({ onlyUnpaid });
+    },
+    async payables() {
+      authorize("purchases.manage");
+      return purchases.payables();
+    },
+
+    // ---- Running costs --------------------------------------------------
+    async expenseCategories() {
+      authorize("expenses.manage");
+      return expenses.categories();
+    },
+    async addExpenseCategory(name) {
+      authorize("expenses.manage");
+      return expenses.addCategory(name);
+    },
+    async addExpense(input, fromDrawer = false) {
+      const user = authorize("expenses.manage");
+      return db.transaction(() => {
+        const e = expenses.add({ ...input, userId: user.id });
+        if (fromDrawer && e.method === "cash") drawerOut(user, e.amountMinor, e.description);
+        return e;
+      })();
+    },
+    async voidExpense(id, reason) {
+      authorize("expenses.manage");
+      return expenses.void(id, reason);
+    },
+    async listExpenses(from, to) {
+      authorize("expenses.manage");
+      return expenses.list(from, to);
+    },
+
+    // ---- Attendance and payroll ----------------------------------------
+    async roster() {
+      authorize("attendance.manage");
+      const inNow = new Map(labour.whoIsIn().map((r) => [r.employeeId, r.clockIn]));
+      return labour.employees().map((e) => ({
+        id: e.id,
+        name: e.name,
+        clockedIn: inNow.has(e.id),
+        since: inNow.get(e.id) ?? null,
+      }));
+    },
+    async clockIn(employeeId) {
+      authorize("attendance.manage");
+      return labour.clockIn(employeeId);
+    },
+    async clockOut(employeeId) {
+      authorize("attendance.manage");
+      return labour.clockOut(employeeId);
+    },
+    async attendance(from, to, employeeId) {
+      authorize("attendance.manage");
+      return labour.attendance(from, to, employeeId);
+    },
+    async addShiftRecord(employeeId, clockIn, clockOut, note) {
+      authorize("attendance.manage");
+      return labour.addShift(employeeId, clockIn, clockOut, note);
+    },
+    async removeShiftRecord(id) {
+      authorize("attendance.manage");
+      labour.removeShift(id);
+    },
+    async listEmployees(includeInactive = false) {
+      authorize("labour.manage");
+      return labour.employees({ includeInactive });
+    },
+    async createEmployee(input) {
+      authorize("labour.manage");
+      return labour.createEmployee(input);
+    },
+    async updateEmployee(id, patch) {
+      authorize("labour.manage");
+      return labour.updateEmployee(id, patch);
+    },
+    async giveAdvance(employeeId, amountMinor, note, fromDrawer = false) {
+      const user = authorize("labour.manage");
+      db.transaction(() => {
+        labour.giveAdvance(employeeId, amountMinor, undefined, note);
+        if (fromDrawer) drawerOut(user, amountMinor, "Salary advance");
+      })();
+    },
+    async payrollPreview(start, end) {
+      authorize("labour.manage");
+      return labour.preview(start, end);
+    },
+    async runPayroll(start, end, lines) {
+      const user = authorize("labour.manage");
+      return labour.finalize({ periodStart: start, periodEnd: end, userId: user.id, lines });
+    },
+    async payPayslip(id, method, fromDrawer = false) {
+      const user = authorize("labour.manage");
+      return db.transaction(() => {
+        const slip = labour.pay(id, method);
+        if (fromDrawer && method === "cash") drawerOut(user, slip.netMinor, "Wages");
+        return slip;
+      })();
+    },
+    async payslips(from, to) {
+      authorize("labour.manage");
+      return labour.payslips({ from, to });
+    },
+
+    // ---- Money in and out -----------------------------------------------
+    async profitAndLoss(from, to) {
+      authorize("finance.view");
+      return finance.profitAndLoss(from, to);
+    },
+    async backupNow() {
+      authorize("settings.manage");
+      if (!hooks.backup) throw new Error("Backups are not available here");
+      return hooks.backup();
     },
 
     // ---- Reports and settings -----------------------------------------

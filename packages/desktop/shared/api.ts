@@ -1,5 +1,20 @@
 import type {
+  AttendanceRecord,
   CheckoutInput,
+  Employee,
+  EmployeeInput,
+  Expense,
+  ExpenseCategory,
+  ExpenseInput,
+  PayMethod,
+  Payables,
+  Payslip,
+  PayslipLineInput,
+  PayrollPreviewLine,
+  ProfitAndLoss,
+  Purchase,
+  PurchaseInput,
+  Recipe,
   LowStockItem,
   NewProduct,
   Permission,
@@ -38,6 +53,17 @@ export interface SessionInfo {
 export type ShiftSummaryView = Omit<ShiftSummary, "expectedCashMinor"> & {
   expectedCashMinor: number | null;
 };
+
+/** Stock and menu items. "all" lists both kinds. */
+export type ItemKind = "product" | "ingredient" | "all";
+
+/** Someone who can be clocked in or out. Pay details are left out on purpose. */
+export interface RosterEntry {
+  id: string;
+  name: string;
+  clockedIn: boolean;
+  since: string | null;
+}
 
 export type StaffInput = { name: string; pin: string; role: Role };
 
@@ -79,6 +105,45 @@ export interface TillbaseApi {
   adjustStock(productId: string, qtyDelta: number, reason: string): Promise<void>;
   lowStock(): Promise<LowStockItem[]>;
 
+  // Menu, ingredients and recipes
+  listItems(kind?: ItemKind): Promise<ProductWithStock[]>;
+  getRecipe(productId: string): Promise<Recipe>;
+  setRecipe(productId: string, lines: { ingredientId: string; qty: number }[]): Promise<Recipe>;
+  recipeCosts(): Promise<Record<string, number>>;
+
+  // Purchases. `fromDrawer` takes the cash out of the open shift's drawer.
+  recordPurchase(input: Omit<PurchaseInput, "userId">, fromDrawer?: boolean): Promise<Purchase>;
+  payPurchase(id: string, amountMinor: number, method: PayMethod, fromDrawer?: boolean): Promise<Purchase>;
+  listPurchases(onlyUnpaid?: boolean): Promise<Purchase[]>;
+  payables(): Promise<Payables>;
+
+  // Running costs
+  expenseCategories(): Promise<ExpenseCategory[]>;
+  addExpenseCategory(name: string): Promise<ExpenseCategory>;
+  addExpense(input: Omit<ExpenseInput, "userId">, fromDrawer?: boolean): Promise<Expense>;
+  voidExpense(id: string, reason: string): Promise<Expense>;
+  listExpenses(from: string, to: string): Promise<Expense[]>;
+
+  // Attendance (managers) and payroll (owner)
+  roster(): Promise<RosterEntry[]>;
+  clockIn(employeeId: string): Promise<AttendanceRecord>;
+  clockOut(employeeId: string): Promise<AttendanceRecord>;
+  attendance(from: string, to: string, employeeId?: string): Promise<AttendanceRecord[]>;
+  addShiftRecord(employeeId: string, clockIn: string, clockOut: string, note?: string): Promise<AttendanceRecord>;
+  removeShiftRecord(id: string): Promise<void>;
+  listEmployees(includeInactive?: boolean): Promise<Employee[]>;
+  createEmployee(input: EmployeeInput): Promise<Employee>;
+  updateEmployee(id: string, patch: Partial<EmployeeInput> & { active?: boolean }): Promise<Employee>;
+  giveAdvance(employeeId: string, amountMinor: number, note?: string, fromDrawer?: boolean): Promise<void>;
+  payrollPreview(start: string, end: string): Promise<PayrollPreviewLine[]>;
+  runPayroll(start: string, end: string, lines?: PayslipLineInput[]): Promise<Payslip[]>;
+  payPayslip(id: string, method: PayMethod, fromDrawer?: boolean): Promise<Payslip>;
+  payslips(from?: string, to?: string): Promise<Payslip[]>;
+
+  // Money: where it comes from and where it goes
+  profitAndLoss(from: string, to: string): Promise<ProfitAndLoss>;
+  backupNow(): Promise<string>;
+
   // Reports and settings
   salesSummary(from: string, to: string): Promise<SalesSummary>;
   updateSettings(patch: Partial<ShopSettings>): Promise<ShopSettings>;
@@ -117,6 +182,13 @@ export const channels: (keyof TillbaseApi)[] = [
   "updateProduct",
   "adjustStock",
   "lowStock",
+  "listItems","getRecipe","setRecipe","recipeCosts",
+  "recordPurchase","payPurchase","listPurchases","payables",
+  "expenseCategories","addExpenseCategory","addExpense","voidExpense","listExpenses",
+  "roster","clockIn","clockOut","attendance","addShiftRecord","removeShiftRecord",
+  "listEmployees","createEmployee","updateEmployee","giveAdvance",
+  "payrollPreview","runPayroll","payPayslip","payslips",
+  "profitAndLoss","backupNow",
   "salesSummary",
   "updateSettings",
   "listStaff",
