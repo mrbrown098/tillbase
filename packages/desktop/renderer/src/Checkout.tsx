@@ -20,8 +20,9 @@ function lineTotals(l: Line) {
   return { gross, net, tax, total: net + tax };
 }
 
-export function Checkout() {
-  const { money, toast } = useApp();
+export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
+  const { money, toast, session, can } = useApp();
+  const shiftOpen = session.shift !== null;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductWithStock[]>([]);
   const [cart, setCart] = useState<Line[]>([]);
@@ -149,6 +150,14 @@ export function Checkout() {
   return (
     <div className="checkout">
       <section className="catalog">
+        {!shiftOpen && (
+          <div className="banner" role="alert">
+            <span>No shift is open, so you cannot sell yet.</span>
+            <button className="btn btn-primary" onClick={onOpenShift}>
+              Open a shift
+            </button>
+          </div>
+        )}
         <input
           ref={inputRef}
           className="scan"
@@ -221,16 +230,18 @@ export function Checkout() {
                     </button>
                   </div>
                   <span className="muted">× {money(l.product.priceMinor)}</span>
-                  <label className="disc">
-                    Disc
-                    <input
-                      inputMode="decimal"
-                      defaultValue={l.discountMinor ? minorToInput(l.discountMinor) : ""}
-                      placeholder="0.00"
-                      onBlur={(e) => setDiscount(l.product.id, e.target.value)}
-                      aria-label={`Discount for ${l.product.name}`}
-                    />
-                  </label>
+                  {can("discount") && (
+                    <label className="disc">
+                      Disc
+                      <input
+                        inputMode="decimal"
+                        defaultValue={l.discountMinor ? minorToInput(l.discountMinor) : ""}
+                        placeholder="0.00"
+                        onBlur={(e) => setDiscount(l.product.id, e.target.value)}
+                        aria-label={`Discount for ${l.product.name}`}
+                      />
+                    </label>
+                  )}
                   <button
                     className="btn btn-ghost"
                     aria-label={`Remove ${l.product.name}`}
@@ -280,7 +291,7 @@ export function Checkout() {
           </button>
           <button
             className="btn btn-primary btn-lg"
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || !shiftOpen}
             onClick={() => setPaying(true)}
           >
             Pay {cart.length > 0 ? money(totals.total) : ""}

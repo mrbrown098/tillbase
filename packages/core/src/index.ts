@@ -18,6 +18,12 @@ export type {
 } from "./sales.js";
 export { ReportService } from "./reports.js";
 export type { SalesSummary } from "./reports.js";
+export { UserService } from "./users.js";
+export type { User } from "./users.js";
+export { can, permissionsOf, roles } from "./permissions.js";
+export type { Permission, Role } from "./permissions.js";
+export { ShiftService } from "./shifts.js";
+export type { Shift, ShiftSummary } from "./shifts.js";
 export { SettingsService, defaultSettings } from "./settings.js";
 export type { ShopSettings } from "./settings.js";
 export { formatReceipt } from "./receipt.js";

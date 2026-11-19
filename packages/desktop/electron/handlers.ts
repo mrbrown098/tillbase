@@ -4,22 +4,75 @@ import {
   ReportService,
   SaleService,
   SettingsService,
+  ShiftService,
+  UserService,
+  can,
   formatReceipt,
+  permissionsOf,
   type Db,
+  type Permission,
   type Sale,
+  type User,
 } from "@tillbase/core";
-import type { CheckoutResult, ProductWithStock, TillbaseApi } from "../shared/api.js";
+import type {
+  CheckoutResult,
+  ProductWithStock,
+  SessionInfo,
+  ShiftSummaryView,
+  TillbaseApi,
+} from "../shared/api.js";
 
 /**
  * The real implementation of the app's API. It has no Electron imports, so it
  * can be tested directly against an in-memory database.
+ *
+ * The signed-in user lives here, in the main process. The page can only ask
+ * for things through this API, and every method checks the permission it
+ * needs, so a modified page cannot do more than the signed-in role allows.
  */
-export function createHandlers(db: Db, receiptPrefix = "T1"): TillbaseApi {
+export function createHandlers(
+  db: Db,
+  receiptPrefix = "T1",
+  now: () => number = Date.now,
+): TillbaseApi {
   const products = new ProductService(db);
   const inventory = new InventoryService(db);
   const sales = new SaleService(db, receiptPrefix);
   const reports = new ReportService(db);
   const settings = new SettingsService(db);
+  const users = new UserService(db, now);
+  const shifts = new ShiftService(db);
+
+  let current: User | null = null;
+
+  const publicUser = (u: User) => ({ id: u.id, name: u.name, role: u.role });
+
+  /** The signed-in user, or an error. Re-reads the account so a deactivated or demoted user loses access at once. */
+  const authorize = (permission?: Permission): User => {
+    if (!current) throw new Error("Please sign in");
+    const fresh = users.get(current.id);
+    if (!fresh || !fresh.active) {
+      current = null;
+      throw new Error("Please sign in");
+    }
+    current = fresh;
+    if (permission && !can(fresh.role, permission)) {
+      throw new Error("You do not have permission to do that");
+    }
+    return fresh;
+  };
+
+  const sessionInfo = (): SessionInfo => {
+    const user = current ? users.get(current.id) : undefined;
+    const active = user && user.active ? user : null;
+    if (!active) current = null;
+    return {
+      needsSetup: users.count() === 0,
+      user: active ? publicUser(active) : null,
+      permissions: active ? permissionsOf(active.role) : [],
+      shift: active ? (shifts.current() ?? null) : null,
+    };
+  };
 
   const withStock = (list: ReturnType<ProductService["list"]>): ProductWithStock[] => {
     const levels = inventory.stockLevels();
@@ -41,18 +94,145 @@ export function createHandlers(db: Db, receiptPrefix = "T1"): TillbaseApi {
     });
   };
 
+  const view = (summary: ReturnType<ShiftService["summary"]>, user: User): ShiftSummaryView => {
+    const reveal = can(user.role, "reports.view") || summary.shift.status === "closed";
+    return { ...summary, expectedCashMinor: reveal ? summary.expectedCashMinor : null };
+  };
+
+  const openShiftOrThrow = () => {
+    const shift = shifts.current();
+    if (!shift) throw new Error("Open a shift before selling");
+    return shift;
+  };
+
   return {
+    // ---- Session -------------------------------------------------------
+    async session() {
+      return sessionInfo();
+    },
+    async loginUsers() {
+      return users.list().map(publicUser);
+    },
+    async setupOwner(name, pin) {
+      if (users.count() > 0) throw new Error("Setup has already been completed");
+      current = users.create({ name, pin, role: "owner" });
+      return sessionInfo();
+    },
+    async login(userId, pin) {
+      current = users.authenticate(userId, pin);
+      return sessionInfo();
+    },
+    async logout() {
+      current = null;
+      return sessionInfo();
+    },
+    async getSettings() {
+      return settings.get();
+    },
+
+    // ---- Selling -------------------------------------------------------
     async listProducts() {
+      authorize("sell");
       return withStock(products.list());
     },
     async searchProducts(query) {
+      authorize("sell");
       return query.trim() ? withStock(products.search(query)) : withStock(products.list());
     },
     async findByBarcode(barcode) {
+      authorize("sell");
       const p = products.findByBarcode(barcode);
       return p ? one(p.id) : null;
     },
+    async checkout(input): Promise<CheckoutResult> {
+      const user = authorize("sell");
+      if (input.lines.some((l) => (l.discountMinor ?? 0) > 0 || l.unitPriceMinor !== undefined)) {
+        authorize("discount");
+      }
+      const shift = openShiftOrThrow();
+      const sale = sales.checkout({
+        ...input,
+        shiftId: shift.id,
+        userId: user.id,
+        cashier: user.name,
+      });
+      return { sale, receipt: receipt(sale) };
+    },
+    async recentSales(limit = 50) {
+      authorize("sell");
+      return sales.recent(limit);
+    },
+    async receiptText(saleId) {
+      authorize("sell");
+      const sale = sales.get(saleId);
+      if (!sale) throw new Error("Sale not found");
+      return receipt(sale);
+    },
+    async voidSale(saleId, reason) {
+      const user = authorize("void");
+      const shift = openShiftOrThrow();
+      const sale = sales.get(saleId);
+      if (!sale) throw new Error("Sale not found");
+      return db.transaction(() => {
+        // If the sale was rung up in an earlier shift, that shift's cash is already
+        // counted and closed, so the refund comes out of today's drawer.
+        if (sale.status === "completed" && sale.shiftId !== shift.id) {
+          const cash =
+            sale.payments.filter((p) => p.method === "cash").reduce((s, p) => s + p.amountMinor, 0) -
+            sale.changeMinor;
+          if (cash > 0) {
+            try {
+              shifts.addCashMovement(shift.id, user.id, -cash, `Refund for voided ${sale.receiptNo}`);
+            } catch {
+              throw new Error("There is not enough cash in the drawer to refund this sale");
+            }
+          }
+        }
+        return sales.voidSale(saleId, reason);
+      })();
+    },
+
+    // ---- Shifts and cash ----------------------------------------------
+    async openShift(openingCashMinor) {
+      const user = authorize("sell");
+      shifts.open(user.id, openingCashMinor);
+      return sessionInfo();
+    },
+    async shiftSummary(shiftId) {
+      const user = authorize("sell");
+      const id = shiftId ?? shifts.current()?.id;
+      if (!id) throw new Error("No shift is open");
+      const summary = shifts.summary(id);
+      // Anyone selling may see the shift currently open (they are working on it);
+      // other people's past shifts are for managers and owners.
+      const isCurrent = summary.shift.status === "open";
+      if (!isCurrent && summary.shift.userId !== user.id && !can(user.role, "shifts.manage_all")) {
+        throw new Error("You do not have permission to do that");
+      }
+      return view(summary, user);
+    },
+    async cashMovement(amountMinor, reason) {
+      const user = authorize("cash.movement");
+      const shift = openShiftOrThrow();
+      shifts.addCashMovement(shift.id, user.id, amountMinor, reason);
+      return view(shifts.summary(shift.id), user);
+    },
+    async closeShift(countedCashMinor, note) {
+      const user = authorize("sell");
+      const shift = openShiftOrThrow();
+      if (shift.userId !== user.id && !can(user.role, "shifts.manage_all")) {
+        throw new Error("Only the person who opened the shift, or a manager, can close it");
+      }
+      return view(shifts.close(shift.id, countedCashMinor, note), user);
+    },
+    async recentShifts() {
+      authorize("shifts.manage_all");
+      return shifts.recent();
+    },
+
+    // ---- Catalogue and stock ------------------------------------------
     async createProduct(input, openingStock) {
+      authorize("products.manage");
       const created = db.transaction(() => {
         const p = products.create(input);
         if (openingStock !== undefined && openingStock !== 0) {
@@ -63,39 +243,53 @@ export function createHandlers(db: Db, receiptPrefix = "T1"): TillbaseApi {
       return one(created.id);
     },
     async updateProduct(id, patch) {
+      authorize("products.manage");
       products.update(id, patch);
       return one(id);
     },
     async adjustStock(productId, qtyDelta, reason) {
+      authorize("stock.adjust");
       if (!products.get(productId)) throw new Error("Product not found");
       inventory.adjust(productId, qtyDelta, reason);
     },
     async lowStock() {
+      authorize("reports.view");
       return inventory.lowStock();
     },
-    async checkout(input): Promise<CheckoutResult> {
-      const sale = sales.checkout(input);
-      return { sale, receipt: receipt(sale) };
-    },
-    async recentSales(limit = 50) {
-      return sales.recent(limit);
-    },
-    async voidSale(saleId, reason) {
-      return sales.voidSale(saleId, reason);
-    },
-    async receiptText(saleId) {
-      const sale = sales.get(saleId);
-      if (!sale) throw new Error("Sale not found");
-      return receipt(sale);
-    },
+
+    // ---- Reports and settings -----------------------------------------
     async salesSummary(from, to) {
+      authorize("reports.view");
       return reports.salesSummary(from, to, 5);
     },
-    async getSettings() {
-      return settings.get();
-    },
     async updateSettings(patch) {
+      authorize("settings.manage");
       return settings.update(patch);
+    },
+
+    // ---- Staff ---------------------------------------------------------
+    async listStaff() {
+      authorize("users.manage");
+      return users.list({ includeInactive: true });
+    },
+    async createStaff(input) {
+      authorize("users.manage");
+      return users.create(input);
+    },
+    async updateStaff(id, patch) {
+      const me = authorize("users.manage");
+      const updated = users.update(id, patch);
+      if (id === me.id) current = updated.active ? updated : null;
+      return updated;
+    },
+    async resetPin(userId, newPin) {
+      authorize("users.manage");
+      users.changePin(userId, newPin);
+    },
+    async changeOwnPin(currentPin, newPin) {
+      const me = authorize();
+      users.authenticate(me.id, currentPin);
+      users.changePin(me.id, newPin);
     },
   };
 }
