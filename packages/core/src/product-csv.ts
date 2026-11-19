@@ -114,14 +114,37 @@ export function parseCsvBoolean(raw: string): boolean {
 export function parseAmountToMinor(raw: string, opts: { decimalComma?: boolean } = {}): number {
   let s = raw.replace(/[^\d.,+-]/g, "");
   if (!s) throw new Error("expected an amount");
-  if (opts.decimalComma) s = s.replace(/\./g, "").replace(/,/g, ".");
-  else s = s.replace(/,/g, "");
   if (s.startsWith("+")) s = s.slice(1);
   if (s.startsWith("-")) throw new Error("must not be negative");
-  if ((s.match(/\./g) ?? []).length > 1) throw new Error(`"${raw.trim()}" is not a number`);
+  s = normalizeDecimal(s, raw, opts.decimalComma ?? false);
   const n = Number(s);
   if (!Number.isFinite(n)) throw new Error(`"${raw.trim()}" is not a number`);
   return Math.round(n * 100);
+}
+
+/**
+ * Turn a grouped number into something `Number` understands.
+ *
+ * A comma is only removed when it really is a thousands separator, that is when
+ * every comma is followed by exactly three digits. "1,250" is 1250, but "12,50"
+ * is somebody's decimal comma, and reading it as 1250 would charge a hundred
+ * times too much. Rather than guess, we stop and say which setting to change.
+ */
+function normalizeDecimal(s: string, raw: string, decimalComma: boolean): string {
+  const group = decimalComma ? "." : ",";
+  if (s.includes(group)) {
+    const grouped = decimalComma ? /^\d+(\.\d{3})+(,\d+)?$/ : /^\d+(,\d{3})+(\.\d+)?$/;
+    if (!grouped.test(s)) {
+      throw new Error(
+        `"${raw.trim()}" uses "${group}" where a thousands separator does not fit. ` +
+          `If it is the decimal separator, import with decimalComma: ${!decimalComma}`,
+      );
+    }
+    s = s.split(group).join("");
+  }
+  if (decimalComma) s = s.replace(/,/g, ".");
+  if ((s.match(/\./g) ?? []).length > 1) throw new Error(`"${raw.trim()}" is not a number`);
+  return s;
 }
 
 /** Read a tax percentage ("18", "18%", "18.5") as basis points (1800, 1850). */
@@ -136,11 +159,12 @@ export function parsePercentToBp(raw: string): number {
 /** Stock can be fractional (kg, litres). Tidy float noise the same way the engine does. */
 function parseQty(raw: string, decimalComma: boolean): number {
   let s = raw.replace(/[^\d.,+-]/g, "");
-  if (decimalComma) s = s.replace(/\./g, "").replace(/,/g, ".");
-  else s = s.replace(/,/g, "");
+  const negative = s.startsWith("-");
+  if (negative || s.startsWith("+")) s = s.slice(1);
+  s = normalizeDecimal(s, raw, decimalComma);
   const n = Number(s);
   if (s === "" || !Number.isFinite(n)) throw new Error(`"${raw.trim()}" is not a quantity`);
-  return round6(n);
+  return round6(negative ? -n : n);
 }
 
 /** Keep six decimal places, so 0.1 + 0.2 style float noise never reaches the log. */
@@ -451,7 +475,17 @@ export class ProductCsvService {
       // fall back to SKU, barcode and name rather than refusing the file.
       let existing = values.id ? this.products.get(values.id) : undefined;
       const idMissed = values.id !== undefined && !existing;
-      if (!existing) existing = this.findExisting(values, matchOnName);
+      try {
+        if (!existing) existing = this.findExisting(values, matchOnName);
+      } catch (e) {
+        issues.push({
+          row: rowNo,
+          severity: "error",
+          message: e instanceof Error ? e.message : String(e),
+        });
+        results.push({ row: rowNo, action: "failed", name: label });
+        continue;
+      }
       if (idMissed) {
         issues.push({
           row: rowNo,
@@ -500,6 +534,52 @@ export class ProductCsvService {
         continue;
       }
       plan.push({ row: rowNo, action: existing ? "updated" : "created", name, values, existing });
+    }
+
+    // A barcode or SKU can only belong to one product. Catch clashes here rather
+    // than halfway through writing, so the preview reports what will really happen.
+    const claimed = new Map<string, number>();
+    const clashed = new Set<number>();
+    for (const item of plan) {
+      if (item.action === "skipped") continue;
+      for (const field of ["barcode", "sku"] as const) {
+        const value = item.values[field] ?? item.existing?.[field];
+        if (!value) continue;
+        const key = `${field}:${value.toLowerCase()}`;
+        const holder = claimed.get(key);
+        if (holder !== undefined) {
+          issues.push({
+            row: item.row,
+            column: field,
+            severity: "error",
+            message: `${field} "${value}" is also used by row ${holder}`,
+          });
+          clashed.add(item.row);
+          continue;
+        }
+        claimed.set(key, item.row);
+        const owner = this.db
+          .prepare(`SELECT id, name FROM products WHERE ${field} = ? COLLATE NOCASE LIMIT 1`)
+          .get(value) as { id: string; name: string } | undefined;
+        if (owner && owner.id !== item.existing?.id) {
+          issues.push({
+            row: item.row,
+            column: field,
+            severity: "error",
+            message: `${field} "${value}" already belongs to "${owner.name}"`,
+          });
+          clashed.add(item.row);
+        }
+      }
+    }
+    if (clashed.size > 0) {
+      for (let i = plan.length - 1; i >= 0; i--) {
+        const item = plan[i]!;
+        if (clashed.has(item.row)) {
+          results.push({ row: item.row, action: "failed", name: item.name });
+          plan.splice(i, 1);
+        }
+      }
     }
 
     const predictedAdjustments = (): number =>
@@ -632,9 +712,17 @@ export class ProductCsvService {
     if (v.barcode) lookups.push(["barcode", v.barcode]);
     if (matchOnName && v.name) lookups.push(["name", v.name]);
     for (const [column, value] of lookups) {
-      const row = this.db
-        .prepare(`SELECT id FROM products WHERE ${column} = ? COLLATE NOCASE ORDER BY created_at LIMIT 1`)
-        .get(value) as { id: string } | undefined;
+      const rows = this.db
+        .prepare(`SELECT id FROM products WHERE ${column} = ? COLLATE NOCASE ORDER BY created_at`)
+        .all(value) as { id: string }[];
+      if (rows.length > 1) {
+        // Guessing here would silently reprice or restock the wrong product.
+        throw new Error(
+          `${rows.length} products share the same ${column} "${value}". ` +
+            "Use a sku or barcode column to say which one this row means",
+        );
+      }
+      const row = rows[0];
       if (row) return this.products.get(row.id);
     }
     return undefined;

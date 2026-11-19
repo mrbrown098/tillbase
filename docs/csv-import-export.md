@@ -59,6 +59,11 @@ for semicolon files and can be forced either way with `decimalComma`.
 Amounts may carry currency symbols and thousands separators: `Rs 1,250`, `₨ 250.5`
 and `PKR 99.99` all read correctly.
 
+**A comma is never guessed at.** It is only treated as a thousands separator when every
+comma is followed by exactly three digits, so `1,250` is 1250 but `12,50` is rejected
+with a message telling you to set `decimalComma: true`. Quietly reading `12,50` as 1250
+would charge a hundred times too much, so the import stops instead of guessing.
+
 ## Checking before committing
 
 Always preview first. A dry run reads and validates the whole file, reports exactly
@@ -82,6 +87,11 @@ Each issue carries a row number (the header is row 1), the column heading, and a
 message written for a shop owner rather than a programmer. Warnings do not block an
 import; errors do.
 
+The preview checks barcode and SKU clashes too, both against products already in the
+database and between rows of the same file, so `preview.failed` is the number of rows
+that will really fail. A write that fails for some unforeseen reason still rolls the
+whole import back.
+
 By default **one bad row means nothing is saved**, so a half-imported catalogue never
 happens. Pass `onError: "skip"` to save the good rows and report the rest.
 
@@ -99,6 +109,9 @@ exact `name`. Inactive products are matched too, so an import can bring one back
   installation work.
 - Two rows in the same file pointing at one product is an error, so stock is never
   applied twice.
+- If two products share a name, matching on name **stops with an error** rather than
+  picking one. Repricing or restocking the wrong product silently is worse than
+  asking for a sku or barcode column.
 
 Set `updateExisting: false` to only add new products, or `matchOnName: false` if your
 product names repeat and only codes should be trusted.

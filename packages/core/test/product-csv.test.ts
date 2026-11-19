@@ -165,6 +165,17 @@ describe("reading the values people type", () => {
     expect(parseAmountToMinor("250,50", { decimalComma: true })).toBe(25050);
   });
 
+  it("refuses to guess at a comma that is not a thousands separator", () => {
+    // Reading "12,50" as 1250 would charge a hundred times too much.
+    expect(() => parseAmountToMinor("12,50")).toThrow(/decimalComma: true/);
+    expect(() => parseAmountToMinor("1,25")).toThrow(/decimalComma: true/);
+    expect(() => parseAmountToMinor("1250,00")).toThrow(/decimalComma: true/);
+    expect(parseAmountToMinor("12,50", { decimalComma: true })).toBe(1250);
+    expect(parseAmountToMinor("1,250")).toBe(125000);
+    expect(parseAmountToMinor("1,250,000.50")).toBe(125000050);
+    expect(() => parseAmountToMinor("1.25", { decimalComma: true })).toThrow(/decimalComma: false/);
+  });
+
   it("refuses nonsense and negative money", () => {
     expect(() => parseAmountToMinor("")).toThrow(/amount/);
     expect(() => parseAmountToMinor("free")).toThrow(/amount/);
@@ -387,19 +398,77 @@ describe("importing a product list", () => {
     expect(products.list()).toHaveLength(0);
   });
 
-  it("rolls back a barcode clash that only shows up while writing", () => {
+  it("catches a barcode clash before writing, so the preview is truthful", () => {
     const file = "name,sku,barcode,price\nFirst,S1,9999,250\nSecond,S2,9999,300\n";
+    const preview = catalog.importCsv(file, { dryRun: true });
+    expect(preview.failed).toBe(1);
+    expect(errors(preview).some((m) => /barcode "9999" is also used by row 2/.test(m))).toBe(true);
+
     const abort = catalog.importCsv(file);
     expect(abort.created).toBe(0);
+    expect(abort.failed).toBe(preview.failed);
     expect(abort.nothingWritten).toBe(true);
     expect(products.list()).toHaveLength(0);
     expect(db.prepare("SELECT COUNT(*) AS n FROM stock_movements").get()).toEqual({ n: 0 });
-    expect(errors(abort).some((m) => /barcode already exists/.test(m))).toBe(true);
 
     const skip = catalog.importCsv(file, { onError: "skip" });
     expect(skip.created).toBe(1);
     expect(skip.failed).toBe(1);
     expect(products.list().map((p) => p.name)).toEqual(["First"]);
+  });
+
+  it("catches a barcode typed onto the wrong row", () => {
+    catalog.importCsv(
+      "name,sku,barcode,price\nExisting,E1,5555,250\nOther,O1,4444,300\n",
+    );
+    // Matched by sku to "Other", but given the barcode that belongs to "Existing".
+    const r = catalog.importCsv("sku,barcode\nO1,5555\n");
+    expect(r.failed).toBe(1);
+    expect(r.updated).toBe(0);
+    expect(errors(r).some((m) => /already belongs to "Existing"/.test(m))).toBe(true);
+    expect(products.findByBarcode("4444")!.name).toBe("Other");
+    expect(products.findByBarcode("5555")!.name).toBe("Existing");
+  });
+
+  it("rolls the whole import back if a write fails for an unexpected reason", () => {
+    // A stand-in for any failure the planner cannot foresee: the safety net must
+    // still leave the database exactly as it was.
+    db.exec(`CREATE TRIGGER block_boom BEFORE INSERT ON products
+             WHEN NEW.name = 'Boom' BEGIN SELECT RAISE(ABORT, 'blocked by trigger'); END;`);
+    const r = catalog.importCsv(
+      "name,price,opening_stock\nGood,250,10\nBoom,300,5\nAlso Good,400,4\n",
+    );
+    expect(r.nothingWritten).toBe(true);
+    expect(r.created).toBe(0);
+    expect(products.list()).toHaveLength(0);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM stock_movements").get()).toEqual({ n: 0 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM categories").get()).toEqual({ n: 0 });
+    expect(errors(r).some((m) => /blocked by trigger/.test(m))).toBe(true);
+    expect(errors(r).some((m) => /rolled back/.test(m))).toBe(true);
+
+    const skip = catalog.importCsv(
+      "name,price,opening_stock\nGood,250,10\nBoom,300,5\nAlso Good,400,4\n",
+      { onError: "skip" },
+    );
+    expect(skip.created).toBe(2);
+    expect(skip.failed).toBe(1);
+    expect(products.list().map((p) => p.name)).toEqual(["Also Good", "Good"]);
+  });
+
+  it("refuses to guess between two products with the same name", () => {
+    const a = products.create({ name: "Milk", priceMinor: 1000, sku: "A" });
+    const b = products.create({ name: "Milk", priceMinor: 2000, sku: "B" });
+    const r = catalog.importCsv("name,price\nMilk,999.00\n");
+    expect(r.updated).toBe(0);
+    expect(r.failed).toBe(1);
+    expect(errors(r).some((m) => /2 products share the same name/.test(m))).toBe(true);
+    expect(products.get(a.id)!.priceMinor).toBe(1000);
+    expect(products.get(b.id)!.priceMinor).toBe(2000);
+
+    const precise = catalog.importCsv("sku,price\nB,999.00\n");
+    expect(precise.updated).toBe(1);
+    expect(products.get(b.id)!.priceMinor).toBe(99900);
+    expect(products.get(a.id)!.priceMinor).toBe(1000);
   });
 
   it("refuses a file it cannot understand at all", () => {
