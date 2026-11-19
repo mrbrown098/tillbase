@@ -4,6 +4,18 @@ export { migrate, migrations } from "./migrations.js";
 export { toMinor, fromMinor, taxFor, formatMoney } from "./money.js";
 export { ProductService } from "./products.js";
 export type { Product, NewProduct, ProductPatch } from "./products.js";
+export { ProductCsvService, PRODUCT_CSV_COLUMNS, normalizeHeading } from "./product-csv.js";
+export type {
+  ImportAction,
+  ImportIssue,
+  ImportResult,
+  ImportRowResult,
+  ProductExportOptions,
+  ProductImportOptions,
+  StockMode,
+} from "./product-csv.js";
+export { parseCsv, formatCsv, detectDelimiter } from "./csv.js";
+export type { CsvCell, CsvReadOptions, CsvWriteOptions } from "./csv.js";
 export { InventoryService } from "./inventory.js";
 export type { LowStockItem } from "./inventory.js";
 export { SaleService } from "./sales.js";
