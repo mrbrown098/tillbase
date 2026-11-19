@@ -28,3 +28,19 @@ export { SettingsService, defaultSettings } from "./settings.js";
 export type { ShopSettings } from "./settings.js";
 export { formatReceipt } from "./receipt.js";
 export type { ReceiptOptions } from "./receipt.js";
+export { RecipeService } from "./recipes.js";
+export type { Recipe, RecipeLine } from "./recipes.js";
+export { lossReasons, tidy } from "./inventory.js";
+export type { ProductKind } from "./products.js";
+export { PurchaseService } from "./purchases.js";
+export type { Payables, PayMethod, Purchase, PurchaseInput, PurchaseItemInput } from "./purchases.js";
+export { ExpenseService } from "./expenses.js";
+export type { Expense, ExpenseCategory, ExpenseInput } from "./expenses.js";
+export { LabourService, computePay } from "./labour.js";
+export type {
+  AttendanceRecord, Employee, EmployeeInput, PayCalc, PayTerms, PayType, Payslip,
+  PayslipLineInput, PayrollPreviewLine,
+} from "./labour.js";
+export * as dates from "./dates.js";
+export { FinanceService } from "./finance.js";
+export type { BreakdownLine, DailyPoint, ItemProfit, ProfitAndLoss } from "./finance.js";

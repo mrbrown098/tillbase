@@ -143,6 +143,149 @@ export const migrations: Migration[] = [
       CREATE INDEX idx_sales_shift ON sales(shift_id);
     `,
   },
+  {
+    version: 3,
+    sql: `
+      -- Costing: every item has a weighted-average cost per unit; ingredients are
+      -- stock items that are not sold directly but consumed by recipes.
+      ALTER TABLE products ADD COLUMN kind TEXT NOT NULL DEFAULT 'product'
+        CHECK (kind IN ('product', 'ingredient'));
+      ALTER TABLE products ADD COLUMN unit TEXT NOT NULL DEFAULT 'pcs';
+      ALTER TABLE products ADD COLUMN avg_cost REAL NOT NULL DEFAULT 0;
+      UPDATE products SET avg_cost = cost_minor;
+
+      ALTER TABLE stock_movements ADD COLUMN value_minor INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sale_items ADD COLUMN cogs_minor INTEGER NOT NULL DEFAULT 0;
+
+      CREATE TABLE recipe_items (
+        id            TEXT PRIMARY KEY,
+        product_id    TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        ingredient_id TEXT NOT NULL REFERENCES products(id),
+        qty           REAL NOT NULL CHECK (qty > 0),
+        UNIQUE (product_id, ingredient_id)
+      );
+      CREATE INDEX idx_recipe_product ON recipe_items(product_id);
+
+      -- Purchases and what we owe suppliers
+      CREATE TABLE purchases (
+        id          TEXT PRIMARY KEY,
+        supplier    TEXT,
+        reference   TEXT,
+        note        TEXT,
+        total_minor INTEGER NOT NULL CHECK (total_minor >= 0),
+        paid_minor  INTEGER NOT NULL DEFAULT 0,
+        user_id     TEXT REFERENCES users(id),
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX idx_purchases_created ON purchases(created_at);
+      CREATE TABLE purchase_items (
+        id          TEXT PRIMARY KEY,
+        purchase_id TEXT NOT NULL REFERENCES purchases(id),
+        product_id  TEXT NOT NULL REFERENCES products(id),
+        qty         REAL NOT NULL CHECK (qty > 0),
+        cost_minor  INTEGER NOT NULL CHECK (cost_minor >= 0)
+      );
+      CREATE INDEX idx_purchase_items_purchase ON purchase_items(purchase_id);
+      CREATE TABLE purchase_payments (
+        id           TEXT PRIMARY KEY,
+        purchase_id  TEXT NOT NULL REFERENCES purchases(id),
+        amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+        method       TEXT NOT NULL CHECK (method IN ('cash', 'card', 'other')),
+        created_at   TEXT NOT NULL
+      );
+
+      -- Running costs
+      CREATE TABLE expense_categories (
+        id     TEXT PRIMARY KEY,
+        name   TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        active INTEGER NOT NULL DEFAULT 1
+      );
+      INSERT INTO expense_categories (id, name) VALUES
+        (lower(hex(randomblob(16))), 'Rent'),
+        (lower(hex(randomblob(16))), 'Electricity'),
+        (lower(hex(randomblob(16))), 'Gas'),
+        (lower(hex(randomblob(16))), 'Water'),
+        (lower(hex(randomblob(16))), 'Internet and phone'),
+        (lower(hex(randomblob(16))), 'Packaging'),
+        (lower(hex(randomblob(16))), 'Marketing'),
+        (lower(hex(randomblob(16))), 'Repairs and maintenance'),
+        (lower(hex(randomblob(16))), 'Transport and delivery'),
+        (lower(hex(randomblob(16))), 'Cleaning'),
+        (lower(hex(randomblob(16))), 'Licenses and taxes'),
+        (lower(hex(randomblob(16))), 'Other');
+      CREATE TABLE expenses (
+        id           TEXT PRIMARY KEY,
+        category_id  TEXT NOT NULL REFERENCES expense_categories(id),
+        description  TEXT NOT NULL,
+        amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+        spent_on     TEXT NOT NULL,
+        method       TEXT NOT NULL CHECK (method IN ('cash', 'card', 'other')),
+        user_id      TEXT REFERENCES users(id),
+        created_at   TEXT NOT NULL,
+        voided_at    TEXT,
+        void_reason  TEXT
+      );
+      CREATE INDEX idx_expenses_date ON expenses(spent_on);
+
+      -- Labour
+      CREATE TABLE employees (
+        id                     TEXT PRIMARY KEY,
+        name                   TEXT NOT NULL,
+        phone                  TEXT,
+        title                  TEXT,
+        pay_type               TEXT NOT NULL CHECK (pay_type IN ('monthly', 'daily', 'hourly')),
+        pay_rate_minor         INTEGER NOT NULL CHECK (pay_rate_minor >= 0),
+        overtime_after_minutes INTEGER NOT NULL DEFAULT 0 CHECK (overtime_after_minutes >= 0),
+        overtime_multiplier_bp INTEGER NOT NULL DEFAULT 15000 CHECK (overtime_multiplier_bp >= 10000),
+        active                 INTEGER NOT NULL DEFAULT 1,
+        created_at             TEXT NOT NULL
+      );
+      CREATE TABLE attendance (
+        id          TEXT PRIMARY KEY,
+        employee_id TEXT NOT NULL REFERENCES employees(id),
+        clock_in    TEXT NOT NULL,
+        clock_out   TEXT,
+        note        TEXT
+      );
+      CREATE INDEX idx_attendance_emp ON attendance(employee_id, clock_in);
+      CREATE UNIQUE INDEX idx_attendance_open ON attendance(employee_id) WHERE clock_out IS NULL;
+      CREATE TABLE advances (
+        id              TEXT PRIMARY KEY,
+        employee_id     TEXT NOT NULL REFERENCES employees(id),
+        amount_minor    INTEGER NOT NULL CHECK (amount_minor > 0),
+        recovered_minor INTEGER NOT NULL DEFAULT 0,
+        given_on        TEXT NOT NULL,
+        note            TEXT,
+        created_at      TEXT NOT NULL
+      );
+      CREATE TABLE payroll_runs (
+        id           TEXT PRIMARY KEY,
+        period_start TEXT NOT NULL,
+        period_end   TEXT NOT NULL,
+        user_id      TEXT REFERENCES users(id),
+        created_at   TEXT NOT NULL
+      );
+      CREATE TABLE payslips (
+        id               TEXT PRIMARY KEY,
+        run_id           TEXT NOT NULL REFERENCES payroll_runs(id),
+        employee_id      TEXT NOT NULL REFERENCES employees(id),
+        period_start     TEXT NOT NULL,
+        period_end       TEXT NOT NULL,
+        minutes          INTEGER NOT NULL,
+        days             INTEGER NOT NULL,
+        base_minor       INTEGER NOT NULL,
+        overtime_minor   INTEGER NOT NULL,
+        bonus_minor      INTEGER NOT NULL,
+        deductions_minor INTEGER NOT NULL,
+        advances_minor   INTEGER NOT NULL,
+        net_minor        INTEGER NOT NULL,
+        paid_minor       INTEGER NOT NULL DEFAULT 0,
+        paid_at          TEXT,
+        method           TEXT
+      );
+      CREATE INDEX idx_payslips_emp ON payslips(employee_id, period_end);
+    `,
+  },
 ];
 
 /** Apply any migrations that have not run yet. Safe to call on every start. */

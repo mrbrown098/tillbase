@@ -39,6 +39,8 @@ export interface SaleItem {
   taxRateBp: number;
   taxMinor: number;
   totalMinor: number;
+  /** What the ingredients or goods sold on this line cost at the time of sale. */
+  cogsMinor: number;
 }
 
 export interface Payment {
@@ -70,11 +72,26 @@ export interface Sale {
 interface ProductRow {
   id: string;
   name: string;
+  kind: string;
+  unit: string;
   price_minor: number;
   tax_rate_bp: number;
   track_stock: number;
+  avg_cost: number;
   active: number;
 }
+
+/** One stock item used up by a sale line: the product itself, or an ingredient of its recipe. */
+interface Use {
+  productId: string;
+  name: string;
+  unit: string;
+  qty: number;
+  avgCost: number;
+  track: boolean;
+}
+
+const fmtQty = (n: number): string => String(Math.round(n * 1000) / 1000);
 
 export class SaleService {
   constructor(
@@ -85,8 +102,8 @@ export class SaleService {
 
   /**
    * Complete a sale in one database transaction: price the lines, check
-   * stock and payment, write the sale, and remove stock. If anything fails,
-   * nothing is saved.
+   * stock and payment, write the sale, use up stock (ingredients, for menu items
+   * with a recipe) and record what it all cost. If anything fails, nothing is saved.
    */
   checkout(input: CheckoutInput): Sale {
     if (input.lines.length === 0) throw new Error("The cart is empty");
@@ -100,17 +117,32 @@ export class SaleService {
       let discount = 0;
       let tax = 0;
 
+      const getProduct = this.db.prepare(
+        `SELECT id, name, kind, unit, price_minor, tax_rate_bp, track_stock, avg_cost, active
+           FROM products WHERE id = ?`,
+      );
+      const getRecipe = this.db.prepare(
+        `SELECT ri.ingredient_id AS id, i.name AS name, i.unit AS unit, i.track_stock AS track,
+                i.avg_cost AS avgCost, ri.qty AS qty
+           FROM recipe_items ri JOIN products i ON i.id = ri.ingredient_id
+          WHERE ri.product_id = ?`,
+      );
+      const stockOf = this.db.prepare(
+        "SELECT COALESCE(SUM(qty_delta), 0) AS q FROM stock_movements WHERE product_id = ?",
+      );
+
+      // Total needed per stock item across the whole cart, so two lines that
+      // both use the same chicken are checked together.
+      const needs = new Map<string, { name: string; unit: string; qty: number }>();
+
       const priced = input.lines.map((line) => {
         if (!(line.qty > 0) || !Number.isFinite(line.qty)) {
           throw new Error("Quantity must be greater than zero");
         }
-        const p = this.db
-          .prepare(
-            "SELECT id, name, price_minor, tax_rate_bp, track_stock, active FROM products WHERE id = ?",
-          )
-          .get(line.productId) as ProductRow | undefined;
+        const p = getProduct.get(line.productId) as ProductRow | undefined;
         if (!p) throw new Error(`Product not found: ${line.productId}`);
         if (p.active !== 1) throw new Error(`Product is inactive: ${p.name}`);
+        if (p.kind !== "product") throw new Error(`${p.name} is an ingredient and cannot be sold`);
 
         const unit = line.unitPriceMinor ?? p.price_minor;
         const lineDiscount = line.discountMinor ?? 0;
@@ -127,33 +159,58 @@ export class SaleService {
         const net = gross - lineDiscount;
         const lineTax = taxFor(net, p.tax_rate_bp);
 
-        if (p.track_stock === 1 && !input.allowNegativeStock) {
-          const have = (
-            this.db
-              .prepare(
-                "SELECT COALESCE(SUM(qty_delta), 0) AS q FROM stock_movements WHERE product_id = ?",
-              )
-              .get(p.id) as { q: number }
-          ).q;
-          if (have < line.qty) {
-            throw new Error(
-              `Not enough stock for ${p.name} (have ${have}, need ${line.qty})`,
-            );
-          }
+        const recipe = getRecipe.all(p.id) as {
+          id: string;
+          name: string;
+          unit: string;
+          track: number;
+          avgCost: number;
+          qty: number;
+        }[];
+        const uses: Use[] =
+          recipe.length > 0
+            ? recipe.map((r) => ({
+                productId: r.id,
+                name: r.name,
+                unit: r.unit,
+                qty: r.qty * line.qty,
+                avgCost: r.avgCost,
+                track: r.track === 1,
+              }))
+            : [
+                {
+                  productId: p.id,
+                  name: p.name,
+                  unit: p.unit,
+                  qty: line.qty,
+                  avgCost: p.avg_cost,
+                  track: p.track_stock === 1,
+                },
+              ];
+        for (const u of uses) {
+          if (!u.track) continue;
+          const cur = needs.get(u.productId);
+          if (cur) cur.qty += u.qty;
+          else needs.set(u.productId, { name: u.name, unit: u.unit, qty: u.qty });
         }
+        const cogs = uses.reduce((sum, u) => sum + Math.round(u.qty * u.avgCost), 0);
 
         subtotal += gross;
         discount += lineDiscount;
         tax += lineTax;
-        return {
-          p,
-          qty: line.qty,
-          unit,
-          lineDiscount,
-          lineTax,
-          total: net + lineTax,
-        };
+        return { p, qty: line.qty, unit, lineDiscount, lineTax, total: net + lineTax, uses, cogs };
       });
+
+      if (!input.allowNegativeStock) {
+        for (const [id, need] of needs) {
+          const have = (stockOf.get(id) as { q: number }).q;
+          if (have + 1e-9 < need.qty) {
+            throw new Error(
+              `Not enough stock for ${need.name} (have ${fmtQty(have)} ${need.unit}, need ${fmtQty(need.qty)} ${need.unit})`,
+            );
+          }
+        }
+      }
 
       const total = subtotal - discount + tax;
 
@@ -199,12 +256,13 @@ export class SaleService {
 
       const insItem = this.db.prepare(
         `INSERT INTO sale_items (id, sale_id, product_id, name, qty, unit_price_minor,
-           discount_minor, tax_rate_bp, tax_minor, total_minor)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           discount_minor, tax_rate_bp, tax_minor, total_minor, cogs_minor)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const insMove = this.db.prepare(
-        `INSERT INTO stock_movements (id, product_id, qty_delta, reason, ref_type, ref_id, created_at)
-         VALUES (?, ?, ?, 'sale', 'sale', ?, ?)`,
+        `INSERT INTO stock_movements
+           (id, product_id, qty_delta, reason, ref_type, ref_id, created_at, value_minor)
+         VALUES (?, ?, ?, 'sale', 'sale', ?, ?, ?)`,
       );
       for (const x of priced) {
         insItem.run(
@@ -218,9 +276,12 @@ export class SaleService {
           x.p.tax_rate_bp,
           x.lineTax,
           x.total,
+          x.cogs,
         );
-        if (x.p.track_stock === 1) {
-          insMove.run(randomUUID(), x.p.id, -x.qty, saleId, now);
+        for (const u of x.uses) {
+          if (u.track) {
+            insMove.run(randomUUID(), u.productId, -u.qty, saleId, now, -Math.round(u.qty * u.avgCost));
+          }
         }
       }
 
@@ -236,7 +297,11 @@ export class SaleService {
     return this.mustGet(run());
   }
 
-  /** Void a completed sale and put its stock back. Cannot be undone. */
+  /**
+   * Void a completed sale and put its stock back. The stock movements made by the
+   * sale are reversed exactly (same items, same quantities, same cost), so recipes
+   * and costs stay correct. Cannot be undone.
+   */
   voidSale(saleId: string, reason: string): Sale {
     if (!reason.trim()) throw new Error("A reason is required to void a sale");
     this.db.transaction(() => {
@@ -253,19 +318,19 @@ export class SaleService {
         )
         .run(reason.trim(), now, saleId);
 
-      const items = this.db
+      const original = this.db
         .prepare(
-          `SELECT si.product_id AS productId, si.qty AS qty, p.track_stock AS track
-             FROM sale_items si JOIN products p ON p.id = si.product_id
-            WHERE si.sale_id = ?`,
+          `SELECT product_id AS productId, qty_delta AS qty, value_minor AS value
+             FROM stock_movements WHERE ref_type = 'sale' AND ref_id = ? AND reason = 'sale'`,
         )
-        .all(saleId) as { productId: string; qty: number; track: number }[];
+        .all(saleId) as { productId: string; qty: number; value: number }[];
       const insMove = this.db.prepare(
-        `INSERT INTO stock_movements (id, product_id, qty_delta, reason, ref_type, ref_id, created_at)
-         VALUES (?, ?, ?, 'void', 'sale', ?, ?)`,
+        `INSERT INTO stock_movements
+           (id, product_id, qty_delta, reason, ref_type, ref_id, created_at, value_minor)
+         VALUES (?, ?, ?, 'void', 'sale', ?, ?, ?)`,
       );
-      for (const it of items) {
-        if (it.track === 1) insMove.run(randomUUID(), it.productId, it.qty, saleId, now);
+      for (const m of original) {
+        insMove.run(randomUUID(), m.productId, -m.qty, saleId, now, -m.value);
       }
     })();
     return this.mustGet(saleId);
@@ -292,6 +357,7 @@ export class SaleService {
         taxRateBp: r.tax_rate_bp as number,
         taxMinor: r.tax_minor as number,
         totalMinor: r.total_minor as number,
+        cogsMinor: (r.cogs_minor as number | undefined) ?? 0,
       }),
     );
     const payments = (
