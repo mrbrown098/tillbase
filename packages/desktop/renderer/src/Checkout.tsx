@@ -346,7 +346,7 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
   );
 }
 
-function PayModal({
+export function PayModal({
   total,
   onClose,
   onConfirm,

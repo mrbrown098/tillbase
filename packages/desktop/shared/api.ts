@@ -1,5 +1,12 @@
 import type {
   AttendanceRecord,
+  KitchenStatus,
+  KitchenTicket,
+  Modifier,
+  ModifierInput,
+  Order,
+  OrderInput,
+  PaymentInput,
   CheckoutInput,
   Employee,
   EmployeeInput,
@@ -105,6 +112,22 @@ export interface TillbaseApi {
   adjustStock(productId: string, qtyDelta: number, reason: string): Promise<void>;
   lowStock(): Promise<LowStockItem[]>;
 
+  // Orders: held orders, tokens, add-ons and the kitchen
+  modifiers(includeInactive?: boolean): Promise<Modifier[]>;
+  addModifier(input: ModifierInput): Promise<Modifier>;
+  updateModifier(id: string, patch: Partial<ModifierInput> & { active?: boolean }): Promise<Modifier>;
+  openOrders(): Promise<Order[]>;
+  createOrder(input: Omit<OrderInput, "userId">): Promise<Order>;
+  updateOrder(id: string, patch: Partial<Omit<OrderInput, "userId">>): Promise<Order>;
+  addOrderItem(orderId: string, input: { productId: string; qty: number; modifierIds?: string[]; note?: string | null }): Promise<Order>;
+  setOrderItemQty(itemId: string, qty: number): Promise<Order>;
+  removeOrderItem(itemId: string): Promise<Order>;
+  sendToKitchen(orderId: string): Promise<KitchenTicket>;
+  kitchenBoard(): Promise<Order[]>;
+  setKitchenStatus(orderId: string, status: KitchenStatus): Promise<Order>;
+  cancelOrder(orderId: string, reason: string): Promise<Order>;
+  payOrder(orderId: string, payments: PaymentInput[]): Promise<CheckoutResult>;
+
   // Menu, ingredients and recipes
   listItems(kind?: ItemKind): Promise<ProductWithStock[]>;
   getRecipe(productId: string): Promise<Recipe>;
@@ -182,6 +205,9 @@ export const channels: (keyof TillbaseApi)[] = [
   "updateProduct",
   "adjustStock",
   "lowStock",
+  "modifiers","addModifier","updateModifier","openOrders","createOrder","updateOrder",
+  "addOrderItem","setOrderItemQty","removeOrderItem","sendToKitchen","kitchenBoard",
+  "setKitchenStatus","cancelOrder","payOrder",
   "listItems","getRecipe","setRecipe","recipeCosts",
   "recordPurchase","payPurchase","listPurchases","payables",
   "expenseCategories","addExpenseCategory","addExpense","voidExpense","listExpenses",

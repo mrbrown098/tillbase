@@ -3,6 +3,7 @@ import {
   FinanceService,
   InventoryService,
   LabourService,
+  OrderService,
   PurchaseService,
   RecipeService,
   ProductService,
@@ -53,6 +54,7 @@ export function createHandlers(
   const expenses = new ExpenseService(db);
   const labour = new LabourService(db);
   const finance = new FinanceService(db);
+  const orders = new OrderService(db, receiptPrefix);
 
   let current: User | null = null;
 
@@ -280,6 +282,72 @@ export function createHandlers(
     async lowStock() {
       authorize("reports.view");
       return inventory.lowStock();
+    },
+
+    // ---- Orders and the kitchen -----------------------------------------
+    async modifiers(includeInactive = false) {
+      authorize("sell");
+      return orders.modifiers({ includeInactive });
+    },
+    async addModifier(input) {
+      authorize("products.manage");
+      return orders.addModifier(input);
+    },
+    async updateModifier(id, patch) {
+      authorize("products.manage");
+      return orders.updateModifier(id, patch);
+    },
+    async openOrders() {
+      authorize("sell");
+      return orders.open();
+    },
+    async createOrder(input) {
+      const user = authorize("sell");
+      return orders.create({ ...input, userId: user.id });
+    },
+    async updateOrder(id, patch) {
+      authorize("sell");
+      return orders.update(id, patch);
+    },
+    async addOrderItem(orderId, input) {
+      authorize("sell");
+      return orders.addItem(orderId, input);
+    },
+    // Items already sent to the kitchen can only be changed by someone who may void.
+    async setOrderItemQty(itemId, qty) {
+      const user = authorize("sell");
+      return orders.setItemQty(itemId, qty, { allowSent: can(user.role, "void") });
+    },
+    async removeOrderItem(itemId) {
+      const user = authorize("sell");
+      return orders.removeItem(itemId, { allowSent: can(user.role, "void") });
+    },
+    async sendToKitchen(orderId) {
+      authorize("sell");
+      return orders.sendToKitchen(orderId);
+    },
+    async kitchenBoard() {
+      authorize("sell");
+      return orders.kitchen();
+    },
+    async setKitchenStatus(orderId, status) {
+      authorize("sell");
+      return orders.setKitchenStatus(orderId, status);
+    },
+    async cancelOrder(orderId, reason) {
+      const user = authorize("sell");
+      const o = orders.get(orderId);
+      // Food that is already being made is a loss, so cancelling it needs a manager.
+      if (o?.items.some((i) => i.sent) && !can(user.role, "void")) {
+        throw new Error("That order is already in the kitchen. Ask a manager to cancel it");
+      }
+      return orders.cancel(orderId, reason);
+    },
+    async payOrder(orderId, payments) {
+      const user = authorize("sell");
+      const shift = openShiftOrThrow();
+      const sale = orders.pay(orderId, { payments, shiftId: shift.id, userId: user.id, cashier: user.name });
+      return { sale, receipt: receipt(sale) };
     },
 
     // ---- Menu, ingredients and recipes --------------------------------
