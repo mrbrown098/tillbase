@@ -45,8 +45,10 @@ Requires Node.js 20 or newer.
 git clone https://github.com/mrbrown098/tillbase.git
 cd tillbase
 npm install
-npm run app        # builds everything and opens the desktop app
+npm run app        # prepares SQLite for Electron, builds everything, opens the app
 ```
+
+The first run takes a minute. If it does not start, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ### Running the tests
 

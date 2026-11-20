@@ -60,6 +60,7 @@ function createWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   const path = databasePath();
+  console.log(`Tillbase data file: ${path}`);
   const db = openDatabase(path);
   // Daily copies of the shop's data, kept next to it. Skipped for in-memory test databases.
   const backupDir = join(dirname(path), "backups");
