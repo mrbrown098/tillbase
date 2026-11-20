@@ -1,0 +1,85 @@
+name: CI
+
+# Runs on every pull request and on every push to main.
+#   test       typecheck and unit tests on Linux, Windows and macOS
+#   smoke      builds the app and launches it for real on Linux, Windows and macOS
+#   installers builds the installers on every OS and tests the INSTALLED app (see installers.yml)
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 20 }
+          - { os: ubuntu-latest, node: 22 }
+          - { os: windows-latest, node: 20 }
+          - { os: macos-latest, node: 20 }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # The tests run in plain Node, which needs a different build of SQLite than Electron does.
+      - run: npm run rebuild:node
+      # `typecheck` and `test` first build @tillbase/core (root pretypecheck / pretest scripts),
+      # because @tillbase/desktop imports the compiled package.
+      - run: npm run typecheck
+      - run: npm test
+
+  smoke:
+    name: App smoke test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @tillbase/core
+      # Prepare SQLite for Electron (prebuilt binary first, compile only if that fails).
+      - run: npm run rebuild -w @tillbase/desktop
+      - run: npm run build -w @tillbase/desktop
+      - name: Install a virtual display (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      - name: Launch the app and walk through first-run setup (Linux, virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke.mjs --dev --shots smoke-output
+      - name: Launch the app and walk through first-run setup
+        if: runner.os != 'Linux'
+        run: node scripts/smoke.mjs --dev --shots smoke-output
+      - name: Save screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshots-${{ runner.os }}
+          path: smoke-output/
+          if-no-files-found: warn
+          retention-days: 14
+
+  installers:
+    name: Installers
+    uses: ./.github/workflows/installers.yml
