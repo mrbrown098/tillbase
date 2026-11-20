@@ -31,13 +31,17 @@ Source for the competitor facts: [pricing](https://www.granetpro.com/pricing.htm
 - [x] CSV import and export of menu items, with a preview of every change before anything is saved (ingredients and recipes are not included)
 - [x] Business suite, slice 1: ingredients and recipes with real cost of goods, purchases with weighted-average cost and supplier payables, wastage valued at cost, running costs, attendance and payroll (monthly, daily, hourly, overtime, advances), profit and loss with break-even and per-item margins, business payments from the till drawer, daily automatic backups
 
+## Audit notes (November 2026)
+
+A full review of the code found no security or correctness blockers: 0 known vulnerabilities in production dependencies, every one of the 78 API methods matched to a handler, every handler except the public settings read checks permissions, and Electron runs with context isolation, sandbox and a content security policy. The gaps that matter most for a real shop are, in order: the first-run currency and country (new installs start in US dollars), a business-day cutoff for late-night trading, an Urdu interface, off-site backups, and database indexes for voids and the wastage report as data grows. Installers and cross-platform CI are in progress. These are in "Planned phases" below.
+
 ## Planned phases
 
 **Phase 2: run a real shop day** (in progress)
-Staff and shifts (done), next: customers with loyalty points and a wallet, dual tax rates for cash and card, business-day cutoff so after-midnight sales belong to the right day, split payments in the checkout screen, CSV import and export of products.
+Staff and shifts (done), menu CSV import and export (done). Next: first-run currency and country, business-day cutoff so after-midnight sales belong to the right day, split payments in the pay screen (in progress), customers with loyalty points and a wallet, dual tax rates for cash and card.
 
 **Phase 3: restaurants** (fast-food billing done: daily tokens, dine-in/takeaway/delivery, held orders, add-ons with cost, send-to-kitchen tickets, kitchen board)
-Still to do here: floor plan, split bills, delivery fees and rider tracking, combos, kitchen stations, a customer-facing token screen.
+In progress: delivery fees and splitting a bill by items. Still to do: floor plan, rider tracking, combos, kitchen stations, a customer-facing token screen.
 
 **Phase 4: back office** (recipes, costs, purchases, payroll and profit and loss are done)
 Still to do: purchase orders, expiry tracking, supplier ledger statements, recurring expenses, accountant export.
@@ -46,7 +50,7 @@ Still to do: purchase orders, expiry tracking, supplier ledger statements, recur
 Several terminals on one local network, then multi-branch with sync when online, plus an owner dashboard.
 
 **Phase 6: hardware and shipping**
-Direct ESC/POS thermal printing and cash drawer kick, silent printing, installers for Windows, macOS and Linux, translations including Urdu.
+Direct ESC/POS thermal printing and cash drawer kick, silent printing, installers for Windows, macOS and Linux (in progress), translations including Urdu.
 
 ## Compliance note (important)
 
