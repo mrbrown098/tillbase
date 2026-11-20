@@ -152,3 +152,20 @@ other work is in flight there. The screen still needs:
 
 Suggested flow: pick file → dry run → show the plan and every issue → confirm → import.
 Never import on file selection alone.
+
+## On screen
+
+The desktop app has this on **Menu and stock → Import / export** (menu items only; it needs the
+`products.manage` permission, which managers and owners have).
+
+- **Choose a file to import** opens the system file window. The app, not the page, reads the file.
+  The preview shows how many items would be added, updated or left as they are, and every row with a
+  problem, marked and explained. Nothing is saved until the person presses **Import**, and the app
+  refuses an import of a file that was not just previewed.
+- By default one bad row means nothing is saved. A tick box saves the good rows and skips the bad ones.
+- Existing stock is left alone unless the person ticks the box to correct it to the file.
+- **Download template** and **Export my menu** open the system save window. The export includes retired
+  items and the `id` column, so bringing it back updates items instead of duplicating them.
+- Ingredients are not part of the file: they are not exported, and an import never matches or changes one.
+  A new menu item whose SKU or barcode an ingredient already uses is reported as a problem in the preview.
+

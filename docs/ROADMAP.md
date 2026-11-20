@@ -28,6 +28,7 @@ Source for the competitor facts: [pricing](https://www.granetpro.com/pricing.htm
 - [x] Staff PIN login, roles (owner, manager, cashier) and permissions
 - [x] Shifts: open with a float, cash in and out, close with a counted drawer and variance
 - [x] Fast-food orders: token numbers, order types, held orders, add-ons, kitchen tickets and board
+- [x] CSV import and export of menu items, with a preview of every change before anything is saved (ingredients and recipes are not included)
 - [x] Business suite, slice 1: ingredients and recipes with real cost of goods, purchases with weighted-average cost and supplier payables, wastage valued at cost, running costs, attendance and payroll (monthly, daily, hourly, overtime, advances), profit and loss with break-even and per-item margins, business payments from the till drawer, daily automatic backups
 
 ## Planned phases

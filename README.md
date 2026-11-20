@@ -34,6 +34,7 @@ The `@tillbase/core` package:
 - **Products:** add and edit products, tax rate, cost, barcode, reorder level and opening stock; adjust stock with a reason; low-stock highlighting.
 - **Sales:** today's totals by payment method, top products, recent sales, reprint receipts, void a sale (stock is restored).
 - **Settings:** store name, currency, number format, receipt width and footer.
+- **Import and export menu items (CSV):** on the Menu and stock screen, bring a menu in from a spreadsheet or save a copy of it. You choose the file, see a preview of exactly what would be added, updated or skipped (with every problem row marked and explained), and only then confirm. Ingredients and recipes are not part of the file.
 - Works fully offline. Data is stored in a local SQLite file.
 
 ## Quick start
@@ -95,7 +96,7 @@ Tax rates are in basis points: `1800` means 18.00%.
 - [ ] Customers and loyalty
 - [ ] Purchasing and suppliers
 - [ ] Multi-branch with sync when online
-- [ ] Data import/export (CSV)
+- [x] Data import/export (CSV) of menu items. Ingredients and recipes are not included yet.
 - [ ] Translations
 
 ## Project layout
