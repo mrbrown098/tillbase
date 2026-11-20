@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { Modifier } from "@tillbase/core";
 import type { ProductWithStock } from "../../shared/api";
 import { api } from "./api";
 import { useApp } from "./context";
@@ -24,6 +25,7 @@ export function Products() {
   const [kind, setKind] = useState<"product" | "ingredient">("product");
   const [costs, setCosts] = useState<Record<string, number>>({});
   const [recipeFor, setRecipeFor] = useState<ProductWithStock | null>(null);
+  const [addOns, setAddOns] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -73,6 +75,11 @@ export function Products() {
             />
             Show inactive
           </label>
+          {kind === "product" && (
+            <button className="btn" onClick={() => setAddOns(true)}>
+              Add-ons
+            </button>
+          )}
           <button className="btn btn-primary" onClick={() => setEditing("new")}>
             {kind === "product" ? "Add menu item" : "Add ingredient"}
           </button>
@@ -149,6 +156,7 @@ export function Products() {
           {kind === "product" ? "No menu items yet." : "No ingredients yet. Add what you buy (chicken, buns, oil) so each dish gets a real cost."}
         </p>
       )}
+      {addOns && <AddOns onClose={() => setAddOns(false)} />}
       {recipeFor && (
         <RecipeEditor
           product={recipeFor}
@@ -534,6 +542,89 @@ function RecipeEditor({
         <button className="btn btn-primary" onClick={() => void save()}>
           Save recipe
         </button>
+      </div>
+    </Modal>
+  );
+}
+
+function AddOns({ onClose }: { onClose: () => void }) {
+  const { money, toast } = useApp();
+  const [list, setList] = useState<Modifier[]>([]);
+  const [ingredients, setIngredients] = useState<ProductWithStock[]>([]);
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [ingredientId, setIngredientId] = useState("");
+  const [qty, setQty] = useState("1");
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setList(await api.modifiers(true));
+      setIngredients((await api.listItems("ingredient")).filter((i) => i.kind === "ingredient" && i.active));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const add = async () => {
+    const priceMinor = price.trim() === "" ? 0 : parseMoney(price);
+    const q = parseQty(qty);
+    if (priceMinor === null) return setError("Enter a valid price, or leave empty for free");
+    if (ingredientId && (q === null || q <= 0)) return setError("Say how much of the ingredient it uses");
+    try {
+      await api.addModifier({ name, priceMinor, ingredientId: ingredientId || null, ingredientQty: ingredientId ? (q ?? 0) : 0 });
+      setName("");
+      setPrice("");
+      setIngredientId("");
+      setError("");
+      toast("Add-on saved");
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <Modal title="Add-ons" onClose={onClose} wide>
+      <p className="muted">Extras and options a customer can ask for, like extra cheese or no onion. Link an ingredient so its cost and stock are counted too.</p>
+      <table className="table">
+        <thead>
+          <tr><th>Add-on</th><th className="num">Extra charge</th><th>Uses</th><th aria-label="Actions" /></tr>
+        </thead>
+        <tbody>
+          {list.map((m) => (
+            <tr key={m.id} className={m.active ? "" : "inactive"}>
+              <td>{m.name}{!m.active && <span className="badge">hidden</span>}</td>
+              <td className="num">{m.priceMinor ? money(m.priceMinor) : "Free"}</td>
+              <td>{m.ingredientId ? `${m.ingredientQty} × ${ingredients.find((i) => i.id === m.ingredientId)?.name ?? "ingredient"}` : "—"}</td>
+              <td className="actions">
+                <button className="btn" onClick={() => void api.updateModifier(m.id, { active: !m.active }).then(load).catch((e: Error) => setError(e.message))}>
+                  {m.active ? "Hide" : "Show"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {list.length === 0 && <p className="empty">No add-ons yet.</p>}
+      <div className="form-grid">
+        <label className="field">Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Extra cheese" /></label>
+        <label className="field">Extra charge<input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" /></label>
+        <label className="field">Uses ingredient (optional)
+          <select value={ingredientId} onChange={(e) => setIngredientId(e.target.value)}>
+            <option value="">None</option>
+            {ingredients.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
+          </select>
+        </label>
+        {ingredientId && <label className="field">Amount per dish<input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></label>}
+      </div>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>Close</button>
+        <button className="btn btn-primary" onClick={() => void add()}>Add add-on</button>
       </div>
     </Modal>
   );

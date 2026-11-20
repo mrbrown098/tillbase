@@ -286,6 +286,53 @@ export const migrations: Migration[] = [
       CREATE INDEX idx_payslips_emp ON payslips(employee_id, period_end);
     `,
   },
+  {
+    version: 4,
+    sql: `
+      -- Fast-food orders: a token per day, an order type, held (open) orders,
+      -- add-ons (modifiers) and a kitchen status.
+      CREATE TABLE orders (
+        id               TEXT PRIMARY KEY,
+        token_date       TEXT NOT NULL,
+        token            INTEGER NOT NULL,
+        type             TEXT NOT NULL CHECK (type IN ('dine_in','takeaway','delivery')),
+        table_label      TEXT,
+        customer_name    TEXT,
+        customer_phone   TEXT,
+        delivery_address TEXT,
+        note             TEXT,
+        status           TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','paid','cancelled')),
+        kitchen_status   TEXT CHECK (kitchen_status IN ('new','preparing','ready','served')),
+        user_id          TEXT REFERENCES users(id),
+        sale_id          TEXT REFERENCES sales(id),
+        cancel_reason    TEXT,
+        created_at       TEXT NOT NULL,
+        sent_at          TEXT,
+        UNIQUE (token_date, token)
+      );
+      CREATE INDEX idx_orders_status ON orders(status, created_at);
+
+      CREATE TABLE order_items (
+        id            TEXT PRIMARY KEY,
+        order_id      TEXT NOT NULL REFERENCES orders(id),
+        product_id    TEXT NOT NULL REFERENCES products(id),
+        qty           REAL NOT NULL CHECK (qty > 0),
+        note          TEXT,
+        modifiers     TEXT NOT NULL DEFAULT '[]',
+        sent_at       TEXT
+      );
+      CREATE INDEX idx_order_items_order ON order_items(order_id);
+
+      CREATE TABLE modifiers (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        price_minor     INTEGER NOT NULL DEFAULT 0 CHECK (price_minor >= 0),
+        ingredient_id   TEXT REFERENCES products(id),
+        ingredient_qty  REAL NOT NULL DEFAULT 0 CHECK (ingredient_qty >= 0),
+        active          INTEGER NOT NULL DEFAULT 1
+      );
+    `,
+  },
 ];
 
 /** Apply any migrations that have not run yet. Safe to call on every start. */

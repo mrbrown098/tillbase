@@ -51,6 +51,8 @@ export interface Payment {
 
 export interface Sale {
   id: string;
+  /** For orders taken through the order screen: e.g. "Token 12 · Dine-in · Table 5". */
+  orderLabel: string | null;
   receiptNo: string;
   status: "completed" | "void";
   subtotalMinor: number;
@@ -372,8 +374,17 @@ export class SaleService {
       }),
     );
 
+    const ord = this.db
+      .prepare("SELECT token, type, table_label AS tbl FROM orders WHERE sale_id = ?")
+      .get(saleId) as { token: number; type: string; tbl: string | null } | undefined;
+    const typeName: Record<string, string> = { dine_in: "Dine-in", takeaway: "Takeaway", delivery: "Delivery" };
+    const orderLabel = ord
+      ? `Token ${ord.token} · ${typeName[ord.type] ?? ord.type}${ord.tbl ? ` · Table ${ord.tbl}` : ""}`
+      : null;
+
     return {
       id: s.id as string,
+      orderLabel,
       receiptNo: s.receipt_no as string,
       status: s.status as "completed" | "void",
       subtotalMinor: s.subtotal_minor as number,

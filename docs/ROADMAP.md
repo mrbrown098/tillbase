@@ -27,6 +27,7 @@ Source for the competitor facts: [pricing](https://www.granetpro.com/pricing.htm
 - [x] Desktop app: checkout, products, stock adjustment, sales, void, settings
 - [x] Staff PIN login, roles (owner, manager, cashier) and permissions
 - [x] Shifts: open with a float, cash in and out, close with a counted drawer and variance
+- [x] Fast-food orders: token numbers, order types, held orders, add-ons, kitchen tickets and board
 - [x] Business suite, slice 1: ingredients and recipes with real cost of goods, purchases with weighted-average cost and supplier payables, wastage valued at cost, running costs, attendance and payroll (monthly, daily, hourly, overtime, advances), profit and loss with break-even and per-item margins, business payments from the till drawer, daily automatic backups
 
 ## Planned phases
@@ -34,8 +35,8 @@ Source for the competitor facts: [pricing](https://www.granetpro.com/pricing.htm
 **Phase 2: run a real shop day** (in progress)
 Staff and shifts (done), next: customers with loyalty points and a wallet, dual tax rates for cash and card, business-day cutoff so after-midnight sales belong to the right day, split payments in the checkout screen, CSV import and export of products.
 
-**Phase 3: restaurants** (next: fast-food billing)
-Floor plan and tables, open tabs, modifiers and combos, kitchen order tickets routed to stations, a kitchen display screen, split bills by item, seat or amount, delivery and takeaway order types.
+**Phase 3: restaurants** (fast-food billing done: daily tokens, dine-in/takeaway/delivery, held orders, add-ons with cost, send-to-kitchen tickets, kitchen board)
+Still to do here: floor plan, split bills, delivery fees and rider tracking, combos, kitchen stations, a customer-facing token screen.
 
 **Phase 4: back office** (recipes, costs, purchases, payroll and profit and loss are done)
 Still to do: purchase orders, expiry tracking, supplier ledger statements, recurring expenses, accountant export.
