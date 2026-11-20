@@ -39,6 +39,21 @@ The `@tillbase/core` package:
 
 ## Quick start
 
+### Download (no developer tools needed)
+
+Get the installer for your computer from the [latest release](https://github.com/mrbrown098/tillbase/releases/latest) and run it:
+
+| Computer | Download |
+|---|---|
+| Windows 10 or 11 | `Tillbase-<version>-win-x64-setup.exe` |
+| Mac with Apple chip (M1 or newer) | `Tillbase-<version>-mac-arm64.dmg` |
+| Mac with Intel chip | `Tillbase-<version>-mac-x64.dmg` |
+| Linux | `Tillbase-<version>-linux-x86_64.AppImage`, or `Tillbase-<version>-linux-amd64.deb` for Ubuntu and Debian |
+
+The installers are not code-signed yet, so Windows and macOS warn you the first time you open them. This is expected; [docs/RELEASING.md](docs/RELEASING.md#unsigned-builds-what-users-will-see) shows the exact clicks. Your data is kept in your user folder, not in the install folder, so updating (install the newer version over the old one) or uninstalling never deletes it.
+
+### Run from source (developers)
+
 Requires Node.js 20 or newer.
 
 ```bash
