@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ProductCsvFile, ProductCsvOptions, ProductCsvReport } from "../../shared/api";
 import { api } from "./api";
 import { useApp } from "./context";
+import { stockLogText } from "./csv-text";
 import { Modal } from "./Modal";
 
 type Step = "start" | "preview" | "done";
@@ -177,7 +178,7 @@ export function ImportExport({ onClose, onChanged }: { onClose: () => void; onCh
           />
         )}
 
-        {step === "done" && report && <Done report={report} />}
+        {step === "done" && report && <Done report={report} fixStock={options.fixStock} />}
 
         {error && (
           <p className="form-error" role="alert">
@@ -276,7 +277,7 @@ function Preview({
       </div>
       {report.stockAdjustments > 0 && (
         <p className="muted small">
-          {plural(report.stockAdjustments, "stock count entry", "stock count entries")} will be written to the stock log.
+          {stockLogText(report.stockAdjustments, options.fixStock, false)}
         </p>
       )}
 
@@ -390,7 +391,7 @@ function Preview({
   );
 }
 
-function Done({ report }: { report: ProductCsvReport }) {
+function Done({ report, fixStock }: { report: ProductCsvReport; fixStock: boolean }) {
   const { problemsByRow, fileNotes } = useMemo(() => groupIssues(report), [report]);
   const failedRows = report.rows.filter((r) => r.action === "failed");
 
@@ -449,7 +450,7 @@ function Done({ report }: { report: ProductCsvReport }) {
       </div>
       {report.stockAdjustments > 0 && (
         <p className="muted small">
-          {plural(report.stockAdjustments, "stock count entry was", "stock count entries were")} added to the stock log.
+          {stockLogText(report.stockAdjustments, fixStock, true)}
         </p>
       )}
       {failedRows.length > 0 && (
