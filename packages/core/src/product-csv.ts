@@ -275,7 +275,8 @@ export class ProductCsvService {
       ),
     );
     const stock = includeStock ? this.inventory.stockLevels() : {};
-    const list = this.products.list({ includeInactive: opts.includeInactive ?? false });
+    // Menu items only: ingredients are bought and counted, not sold, and are not part of this file.
+    const list = this.products.list({ includeInactive: opts.includeInactive ?? false, kind: "product" });
 
     const rows: CsvCell[][] = [columns];
     for (const p of list) {
@@ -449,7 +450,10 @@ export class ProductCsvService {
       // Find the product this row is about, if it already exists. An id from our
       // own export is a hint: restoring into a new database has different ids, so
       // fall back to SKU, barcode and name rather than refusing the file.
-      let existing = values.id ? this.products.get(values.id) : undefined;
+      // Only menu items are matched: an id, SKU, barcode or name that belongs to an ingredient
+      // must never let a menu-item file change that ingredient.
+      const byId = values.id ? this.products.get(values.id) : undefined;
+      let existing = byId?.kind === "product" ? byId : undefined;
       const idMissed = values.id !== undefined && !existing;
       if (!existing) existing = this.findExisting(values, matchOnName);
       if (idMissed) {
@@ -461,6 +465,17 @@ export class ProductCsvService {
             ? `No product with id ${values.id}; matched "${existing.name}" by sku, barcode or name`
             : `No product with id ${values.id}; this row will be added as a new product`,
         });
+      }
+
+      if (!existing) {
+        // SKUs and barcodes are unique across menu items and ingredients. Say so now, in the
+        // preview, rather than failing only when the import writes.
+        const clash = this.ingredientClash(values);
+        if (clash) {
+          issues.push({ row: rowNo, column: clash.column, severity: "error", message: clash.message });
+          results.push({ row: rowNo, action: "failed", name: label });
+          continue;
+        }
       }
 
       if (!existing && values.name === undefined) {
@@ -633,9 +648,28 @@ export class ProductCsvService {
     if (matchOnName && v.name) lookups.push(["name", v.name]);
     for (const [column, value] of lookups) {
       const row = this.db
-        .prepare(`SELECT id FROM products WHERE ${column} = ? COLLATE NOCASE ORDER BY created_at LIMIT 1`)
+        .prepare(
+          `SELECT id FROM products WHERE ${column} = ? COLLATE NOCASE AND kind = 'product' ORDER BY created_at LIMIT 1`,
+        )
         .get(value) as { id: string } | undefined;
       if (row) return this.products.get(row.id);
+    }
+    return undefined;
+  }
+
+  /** An ingredient already using the SKU or barcode a new menu item asks for, if any. */
+  private ingredientClash(v: RowValues): { column: string; message: string } | undefined {
+    for (const [column, value] of [["sku", v.sku], ["barcode", v.barcode]] as const) {
+      if (!value) continue;
+      const row = this.db
+        .prepare(`SELECT name FROM products WHERE ${column} = ? AND kind = 'ingredient' LIMIT 1`)
+        .get(value) as { name: string } | undefined;
+      if (row) {
+        return {
+          column,
+          message: `The ${column === "sku" ? "SKU" : "barcode"} ${value} is already used by the ingredient "${row.name}"`,
+        };
+      }
     }
     return undefined;
   }

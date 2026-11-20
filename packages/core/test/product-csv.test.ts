@@ -630,3 +630,51 @@ describe("a shop day that starts with an import", () => {
     expect(reasons.map((r) => r.reason)).toEqual(["opening stock", "sale", "stock count"]);
   });
 });
+
+describe("menu items only: ingredients are never touched", () => {
+  const makeOnion = () =>
+    products.create({ name: "Onion", kind: "ingredient", unit: "kg", priceMinor: 0, costMinor: 12000, sku: "ONION", barcode: "9001" });
+
+  it("leaves ingredients out of the export", () => {
+    makeOnion();
+    products.create({ name: "Burger", priceMinor: 45000 });
+    const rows = parseCsv(catalog.exportCsv());
+    expect(rows.map((r) => r[0])).toEqual(["name", "Burger"]);
+    expect(rows.some((r) => r.includes("Onion"))).toBe(false);
+  });
+
+  it("does not update an ingredient that shares a name, sku or barcode with a row", () => {
+    const onion = makeOnion();
+    const byName = catalog.importCsv("name,price\nOnion,10.00\n");
+    // A new menu item called Onion is created; the ingredient is left exactly as it was.
+    expect(byName.created).toBe(1);
+    expect(byName.updated).toBe(0);
+    const after = products.get(onion.id)!;
+    expect(after.priceMinor).toBe(0);
+    expect(after.costMinor).toBe(12000);
+    expect(after.kind).toBe("ingredient");
+  });
+
+  it("does not follow an id that belongs to an ingredient", () => {
+    const onion = makeOnion();
+    const r = catalog.importCsv(`id,name,price\n${onion.id},Fried Onion,25.00\n`, { dryRun: true });
+    expect(r.updated).toBe(0);
+    expect(r.created).toBe(1);
+    expect(r.issues.some((i) => i.severity === "warning" && i.column === "id")).toBe(true);
+    expect(products.get(onion.id)!.name).toBe("Onion");
+  });
+
+  it("reports an ingredient's sku or barcode clash in the preview, not only when writing", () => {
+    makeOnion();
+    const sku = catalog.importCsv("name,sku,price\nOnion Rings,ONION,50.00\n", { dryRun: true });
+    expect(sku.failed).toBe(1);
+    expect(errors(sku)).toEqual(['The SKU ONION is already used by the ingredient "Onion"']);
+    const barcode = catalog.importCsv("name,barcode,price\nOnion Rings,9001,50.00\n", { dryRun: true });
+    expect(barcode.failed).toBe(1);
+    expect(errors(barcode)).toEqual(['The barcode 9001 is already used by the ingredient "Onion"']);
+    // And the real import saves nothing, as for any other bad row.
+    const real = catalog.importCsv("name,sku,price\nOnion Rings,ONION,50.00\nBurger,B1,45.00\n");
+    expect(real.nothingWritten).toBe(true);
+    expect(products.list({ kind: "product" })).toHaveLength(0);
+  });
+});
