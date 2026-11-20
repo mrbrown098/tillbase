@@ -794,3 +794,21 @@ tr.inactive td {
 .kcard .btn { width: 100%; }
 .order-body .cart-actions { flex-wrap: wrap; }
 .order-body .cart-actions .btn-primary { flex: 1 1 100%; }
+
+/* ---- CSV import and export ---- */
+.modal-wide:has(.csv-screen) { width: min(980px, 100%); }
+.csv-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+.csv-ok { color: var(--accent); font-weight: 600; margin: 8px 0; overflow-wrap: anywhere; }
+.csv-stats { margin: 12px 0; }
+.csv-stat-bad { border-color: var(--danger); }
+.csv-stat-bad .stat-value { color: var(--danger); }
+.csv-banner { justify-content: flex-start; }
+.csv-notes { margin: 8px 0; padding-left: 20px; }
+.csv-note-error { color: var(--danger); font-weight: 600; }
+.csv-note-warn { color: var(--warn); }
+.csv-scroll { max-height: 300px; overflow: auto; margin: 8px 0; border-radius: var(--radius); }
+.csv-table th { position: sticky; top: 0; background: var(--panel); }
+.csv-row-failed td { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.csv-options { border: 1px solid var(--line); border-radius: var(--radius); margin: 12px 0 0; padding: 8px 14px 12px; display: grid; gap: 8px; }
+.csv-options legend { padding: 0 6px; font-size: 0.8rem; color: var(--muted); }
+.csv-hint { margin: 0 0 0 26px; }

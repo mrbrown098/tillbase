@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import {
   ExpenseService,
   FinanceService,
   InventoryService,
   LabourService,
   OrderService,
+  ProductCsvService,
   PurchaseService,
   RecipeService,
   ProductService,
@@ -16,12 +18,16 @@ import {
   formatReceipt,
   permissionsOf,
   type Db,
+  type ImportResult,
   type Permission,
   type Sale,
   type User,
 } from "@tillbase/core";
 import type {
   CheckoutResult,
+  ProductCsvFile,
+  ProductCsvOptions,
+  ProductCsvReport,
   ProductWithStock,
   SessionInfo,
   ShiftSummaryView,
@@ -40,7 +46,15 @@ export function createHandlers(
   db: Db,
   receiptPrefix = "T1",
   now: () => number = Date.now,
-  hooks: { backup?: () => Promise<string>; afterShiftClose?: () => void } = {},
+  hooks: {
+    backup?: () => Promise<string>;
+    afterShiftClose?: () => void;
+    /** Native file dialogs, supplied by the Electron main process. Each returns null if the person cancels. */
+    files?: {
+      openCsv: () => Promise<ProductCsvFile | null>;
+      saveCsv: (suggestedName: string, text: string) => Promise<string | null>;
+    };
+  } = {},
 ): TillbaseApi {
   const products = new ProductService(db);
   const inventory = new InventoryService(db);
@@ -55,6 +69,7 @@ export function createHandlers(
   const labour = new LabourService(db);
   const finance = new FinanceService(db);
   const orders = new OrderService(db, receiptPrefix);
+  const productCsv = new ProductCsvService(db);
 
   let current: User | null = null;
 
@@ -128,6 +143,35 @@ export function createHandlers(
     } catch {
       throw new Error("There is not enough cash in the drawer for that payment");
     }
+  };
+
+  // ---- CSV helpers -------------------------------------------------------
+  const maxCsvChars = 5_000_000;
+  /** The file and choices of the last preview. An import is only allowed for exactly that. */
+  let previewed: string | null = null;
+  const csvFingerprint = (text: string, o: ProductCsvOptions) =>
+    createHash("sha256")
+      .update(JSON.stringify([text, o.updateExisting ?? true, o.fixStock === true]))
+      .digest("hex");
+  const csvText = (text: unknown): string => {
+    if (typeof text !== "string") throw new Error("Choose a CSV file first");
+    if (text.length > maxCsvChars) throw new Error("That file is too big to import at once (over 5 MB). Please split it into smaller files.");
+    return text;
+  };
+  const csvReport = (r: ImportResult): ProductCsvReport => ({
+    dryRun: r.dryRun,
+    created: r.created,
+    updated: r.updated,
+    skipped: r.skipped,
+    failed: r.failed,
+    stockAdjustments: r.stockAdjustments,
+    rows: r.rows,
+    issues: r.issues,
+    nothingWritten: r.nothingWritten,
+  });
+  const csvFiles = () => {
+    if (!hooks.files) throw new Error("Opening and saving files is not available here");
+    return hooks.files;
   };
 
   return {
@@ -538,6 +582,52 @@ export function createHandlers(
       const me = authorize();
       users.authenticate(me.id, currentPin);
       users.changePin(me.id, newPin);
+    },
+
+    // ---- Menu items as CSV ----------------------------------------------
+    async chooseProductCsv() {
+      authorize("products.manage");
+      return csvFiles().openCsv();
+    },
+    async productCsvTemplate() {
+      authorize("products.manage");
+      return productCsv.templateCsv({ bom: true });
+    },
+    async exportProductCsv() {
+      authorize("products.manage");
+      // Retired items and the id column are included so the file can be brought back later and updates, not duplicates.
+      return productCsv.exportCsv({ includeInactive: true, includeIds: true, bom: true });
+    },
+    async saveCsvFile(suggestedName, text) {
+      authorize("products.manage");
+      const body = csvText(text);
+      const base = String(suggestedName).replace(/[^\w.\- ]+/g, "_").slice(0, 80) || "tillbase";
+      return csvFiles().saveCsv(/\.csv$/i.test(base) ? base : `${base}.csv`, body);
+    },
+    async previewProductCsv(text, options = {}) {
+      authorize("products.manage");
+      const body = csvText(text);
+      const result = productCsv.importCsv(body, {
+        dryRun: true,
+        updateExisting: options.updateExisting ?? true,
+        stockMode: options.fixStock ? "set" : "ignore",
+      });
+      previewed = csvFingerprint(body, options);
+      return csvReport(result);
+    },
+    async importProductCsv(text, options = {}) {
+      authorize("products.manage");
+      const body = csvText(text);
+      if (previewed !== csvFingerprint(body, options)) {
+        throw new Error("Please look over the preview of this file before importing it");
+      }
+      previewed = null; // one preview, one import: a second click cannot import the file twice
+      const result = productCsv.importCsv(body, {
+        updateExisting: options.updateExisting ?? true,
+        stockMode: options.fixStock ? "set" : "ignore",
+        onError: options.skipBadRows ? "skip" : "abort",
+      });
+      return csvReport(result);
     },
   };
 }

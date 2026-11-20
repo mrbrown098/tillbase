@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { backupDatabase, openDatabase } from "@tillbase/core";
 import { channels, type IpcResult, type TillbaseApi } from "../shared/api.js";
+import { createFileDialogs } from "./files.js";
 import { createHandlers } from "./handlers.js";
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -67,7 +68,8 @@ void app.whenReady().then(() => {
     if (path !== ":memory:") backup().catch((e) => console.error("Backup failed:", e));
   };
   quietBackup();
-  registerIpc(createHandlers(db, "T1", Date.now, { backup, afterShiftClose: quietBackup }));
+  const files = createFileDialogs(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
+  registerIpc(createHandlers(db, "T1", Date.now, { backup, afterShiftClose: quietBackup, files }));
   createWindow();
 
   app.on("activate", () => {

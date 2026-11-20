@@ -4,6 +4,7 @@ import type { ProductWithStock } from "../../shared/api";
 import { api } from "./api";
 import { useApp } from "./context";
 import { bpToPercent, minorToInput, parseMoney, parseQty, percentToBp } from "./format";
+import { ImportExport } from "./ImportExport";
 import { Modal } from "./Modal";
 
 export const lossReasons = [
@@ -26,6 +27,7 @@ export function Products() {
   const [costs, setCosts] = useState<Record<string, number>>({});
   const [recipeFor, setRecipeFor] = useState<ProductWithStock | null>(null);
   const [addOns, setAddOns] = useState(false);
+  const [csv, setCsv] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -78,6 +80,11 @@ export function Products() {
           {kind === "product" && (
             <button className="btn" onClick={() => setAddOns(true)}>
               Add-ons
+            </button>
+          )}
+          {kind === "product" && can("products.manage") && (
+            <button className="btn" onClick={() => setCsv(true)}>
+              Import / export
             </button>
           )}
           <button className="btn btn-primary" onClick={() => setEditing("new")}>
@@ -157,6 +164,7 @@ export function Products() {
         </p>
       )}
       {addOns && <AddOns onClose={() => setAddOns(false)} />}
+      {csv && <ImportExport onClose={() => setCsv(false)} onChanged={() => void load()} />}
       {recipeFor && (
         <RecipeEditor
           product={recipeFor}
