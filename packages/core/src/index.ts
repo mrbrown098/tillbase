@@ -57,3 +57,5 @@ export * as dates from "./dates.js";
 export { FinanceService } from "./finance.js";
 export type { BreakdownLine, DailyPoint, ItemProfit, ProfitAndLoss } from "./finance.js";
 export { backupDatabase } from "./backup.js";
+export { OrderService, orderTypes, orderTypeLabel, kitchenStatuses } from "./orders.js";
+export type { Modifier, ModifierInput, Order, OrderInput, OrderItem, OrderType, KitchenStatus, KitchenTicket } from "./orders.js";

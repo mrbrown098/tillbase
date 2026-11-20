@@ -33,6 +33,7 @@ export function formatReceipt(sale: Sale, opts: ReceiptOptions): string {
 
   out.push(opts.storeName.slice(0, width));
   out.push(line);
+  if (sale.orderLabel) out.push(sale.orderLabel);
   out.push(`Receipt: ${sale.receiptNo}`);
   out.push(`Date:    ${localStamp(sale.createdAt)}`);
   if (sale.cashier) out.push(`Cashier: ${sale.cashier}`);
