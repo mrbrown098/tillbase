@@ -24,5 +24,5 @@ Electron and plain Node need different builds of SQLite.
 
 ## Where is my data?
 
-In one SQLite file in the app's data folder (the path is shown in Settings). Daily backups are kept in a
-`backups` folder next to it. To move to a new computer, copy the database file.
+In one SQLite file in the app's data folder. The exact path is printed in the terminal when the app starts
+("Tillbase data file: ..."). Daily backups are kept in a `backups` folder next to it. To move to a new computer, copy the database file.
