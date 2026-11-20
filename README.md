@@ -2,7 +2,7 @@
 
 Free, open source, offline-first point of sale for shops, supermarkets, malls and restaurants.
 
-> **Status: early development (v0.3).** The core engine and a desktop app (checkout, products, stock, sales, staff logins, shifts, settings) work and are tested. Restaurant mode, customers/loyalty and multi-branch are still to come. See [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and how Tillbase compares with paid POS products. This is not yet certified for Pakistani tax-authority integration.
+> **Status: early development (v0.4).** Tillbase is growing from a till into a full business suite for shops, cafes and fast-food restaurants: selling, orders and kitchen, stock and recipes, purchases, running costs, staff wages, and a profit-and-loss screen that answers "are we making money, and where is it going?". Everything below is built and tested. Multi-branch, customers/loyalty and direct thermal printing are still to come. See [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) if you want to contribute. **Not yet approved for FBR, PRA or SRB tax-authority integration.**
 
 ## Why Tillbase
 
@@ -12,29 +12,27 @@ Free, open source, offline-first point of sale for shops, supermarkets, malls an
 - **Auditable stock.** Stock is a log of movements, never an overwritten number.
 - **Safe checkout.** A sale is one database transaction: if anything fails, nothing is saved.
 
-## What works today
+## What it does
 
-The `@tillbase/core` package:
+**Selling**
+- **Checkout** for counter sales: barcode scanner or name search, quantities, line discounts, tax, cash or card, change due, receipts for 58mm and 80mm printers.
+- **Orders** for fast-food and restaurants: daily token numbers, dine-in, takeaway and delivery, table or customer details, add-ons such as extra cheese (with their own price and ingredient cost), several orders held open at once, paid in one tap. Every edit is saved immediately.
+- **Kitchen** board and tickets: only new items are sent, and orders move new, preparing, ready, served. Late orders turn red. Only a manager can change or cancel food already in the kitchen.
 
-- Products with barcode, SKU, cost, price and per-product tax rate
-- Barcode lookup and name/SKU/barcode search
-- Stock tracking, manual adjustments and low-stock list
-- Checkout with line discounts, tax, split payments (cash, card, other) and change
-- Overselling protection, with an opt-in override
-- Sequential receipt numbers
-- Voiding a sale, which restores stock
-- Sales summary by period and payment method, with top products
-- Plain-text receipts for 58mm and 80mm thermal printers
+**Knowing your numbers**
+- **Menu and stock:** menu items and ingredients with units. A recipe gives each dish a real cost from what you actually paid (weighted-average cost), and selling a dish uses up its ingredients. Food-cost percentage and margin per item.
+- **Purchases:** record what you buy and what you still owe suppliers; pay it down later.
+- **Running costs:** rent, electricity, gas and more, in categories you can extend. Wastage (waste, spoilage, expiry) is valued at cost.
+- **Team and wages:** clock in and out; monthly, daily or hourly pay with overtime; advances recovered at payroll; payslips paid from the till drawer if you like.
+- **Money (owner only):** profit or loss, where every rupee of sales went, break-even sales, per-item margins, busy hours, stock value and what you owe. It warns you when a number cannot be trusted, for example when an item has no cost.
 
-## What the desktop app does
+**Running the shop safely**
+- **Staff and roles:** PIN login, owner, manager and cashier roles, enforced in the app's main process and not just hidden in the screen. PINs are salted hashes, wrong PINs lock for 30 seconds, and the till signs out after 5 idle minutes.
+- **Shifts:** open with a float, cash in and out, count the drawer blind, see short, over or exact. Business payments can come out of the drawer and are counted.
+- **Backups:** a daily copy of your data, and another after each shift closes. The newest 14 are kept next to the database.
+- Works fully offline. Data is one local SQLite file.
 
-- **Staff and roles:** PIN login for each person, with owner, manager and cashier roles. Cashiers can sell; discounts, voids, cash in/out, stock and reports need a manager; staff and settings need an owner. PINs are stored as salted hashes, wrong PINs lock the account for 30 seconds, and the till signs out after 5 idle minutes. Permissions are enforced in the app's main process, not just hidden in the screen.
-- **Shifts:** open with a cash float, record cash in and out, then count the drawer to close. The expected amount is hidden from cashiers until they close, so they count what is really there. Shows the difference as short, over or exact.
-- **Checkout:** scan a barcode (USB scanners work like a keyboard) or search by name, tap products, change quantities, add a per-line discount, take cash or card, show change due, print the receipt.
-- **Products:** add and edit products, tax rate, cost, barcode, reorder level and opening stock; adjust stock with a reason; low-stock highlighting.
-- **Sales:** today's totals by payment method, top products, recent sales, reprint receipts, void a sale (stock is restored).
-- **Settings:** store name, currency, number format, receipt width and footer.
-- Works fully offline. Data is stored in a local SQLite file.
+**Also in the core library (no screen yet):** CSV import and export of the product list, see [docs/csv-import-export.md](docs/csv-import-export.md).
 
 ## Quick start
 
@@ -85,18 +83,22 @@ Tax rates are in basis points: `1800` means 18.00%.
 
 ## Roadmap
 
-- [x] Core engine: products, stock, sales, payments, reports, receipts
-- [x] Desktop app (Electron + React): checkout, barcode scanning, products, stock, sales, settings
-- [ ] Split payments in the checkout screen (the core already supports them)
-- [x] Staff PIN login, roles and permissions; shifts with cash drawer reconciliation
-- [ ] Direct receipt printing (ESC/POS thermal printers) and cash drawer kick. Today receipts print through the system print dialog.
-- [ ] Installers for Windows, macOS and Linux
-- [ ] Restaurant mode: tables, kitchen orders, split bills
+- [x] Core engine, desktop app, barcode checkout, receipts
+- [x] Staff logins, roles, shifts and cash drawer reconciliation
+- [x] Ingredients, recipes and real cost of goods; purchases; running costs; wastage
+- [x] Attendance and payroll; profit and loss
+- [x] Fast-food orders, add-ons and kitchen board
+- [x] Daily backups
+- [ ] Business mode switch (retail or restaurant) and small, privacy-respecting banner slots on non-critical screens
+- [ ] Product CSV import and export screen
+- [ ] Delivery fees, split bills, floor plan, combos
 - [ ] Customers and loyalty
-- [ ] Purchasing and suppliers
+- [ ] Direct receipt printing (ESC/POS) and cash drawer kick
+- [ ] Installers for Windows, macOS and Linux
 - [ ] Multi-branch with sync when online
-- [ ] Data import/export (CSV)
-- [ ] Translations
+- [ ] Translations, including Urdu
+
+The detailed plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Project layout
 
@@ -108,7 +110,7 @@ packages/
 
 ## Contributing
 
-Issues and pull requests are welcome. Run `npm test` and `npm run typecheck` before sending a change.
+Issues and pull requests are welcome. Read [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) first: it explains the rules the code follows. Run `npm test` and `npm run typecheck` before sending a change.
 
 ## License
 
