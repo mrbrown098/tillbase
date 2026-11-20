@@ -19,6 +19,28 @@ export function decodeCsv(bytes: Uint8Array): string {
 }
 
 /**
+ * TEST-ONLY file paths. Native file windows cannot be clicked by an automated test, so an end-to-end
+ * test can start the app with these environment variables set to skip the window:
+ *
+ *   TILLBASE_TEST_CSV_OPEN=/path/in.csv    "Choose a file to import" reads this file
+ *   TILLBASE_TEST_CSV_SAVE=/path/out.csv   "Export" and "Download template" write to this file
+ *
+ * Safe by design: environment variables belong to the main process, so the page (renderer) cannot
+ * set or change them, and they are ignored completely in an installed (packaged) app. When they are
+ * not set, nothing here changes and the normal system window is used. Every other check (file type,
+ * size, readable) still runs on the supplied path, so the test exercises the real code.
+ */
+export function testPath(
+  name: "TILLBASE_TEST_CSV_OPEN" | "TILLBASE_TEST_CSV_SAVE",
+  env: Record<string, string | undefined>,
+  isPackaged: boolean,
+): string | null {
+  if (isPackaged) return null;
+  const value = env[name];
+  return value && value.trim() !== "" ? value : null;
+}
+
+/**
  * Native open and save dialogs for CSV files. This is the only place that touches the disk for
  * the CSV screen: the page asks, the person chooses a file in the system dialog, and the main
  * process reads or writes it. The page never gets a path to read from or write to.
@@ -33,10 +55,17 @@ export function createFileDialogs(getWindow: () => BrowserWindow | null) {
         properties: ["openFile" as const],
         filters: [{ name: "Spreadsheet (CSV)", extensions: ["csv"] }],
       };
-      const win = getWindow();
-      const picked = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
-      const path = picked.filePaths[0];
-      if (picked.canceled || !path) return null;
+      const forced = testPath("TILLBASE_TEST_CSV_OPEN", process.env, app.isPackaged);
+      let path: string | undefined;
+      if (forced) {
+        path = forced;
+      } else {
+        const win = getWindow();
+        const picked = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+        if (picked.canceled) return null;
+        path = picked.filePaths[0];
+      }
+      if (!path) return null;
 
       if (extname(path).toLowerCase() !== ".csv") {
         throw new Error("Please choose a .csv file. In Excel, use Save As and pick CSV.");
@@ -64,10 +93,14 @@ export function createFileDialogs(getWindow: () => BrowserWindow | null) {
         defaultPath: join(app.getPath("documents"), suggestedName),
         filters: [{ name: "Spreadsheet (CSV)", extensions: ["csv"] }],
       };
-      const win = getWindow();
-      const chosen = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options);
-      if (chosen.canceled || !chosen.filePath) return null;
-      const path = extname(chosen.filePath).toLowerCase() === ".csv" ? chosen.filePath : `${chosen.filePath}.csv`;
+      let filePath: string | undefined = testPath("TILLBASE_TEST_CSV_SAVE", process.env, app.isPackaged) ?? undefined;
+      if (!filePath) {
+        const win = getWindow();
+        const chosen = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options);
+        if (chosen.canceled || !chosen.filePath) return null;
+        filePath = chosen.filePath;
+      }
+      const path = extname(filePath).toLowerCase() === ".csv" ? filePath : `${filePath}.csv`;
       try {
         await writeFile(path, text, "utf8");
       } catch {
