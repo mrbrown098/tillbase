@@ -44,3 +44,40 @@ export function todayRange(): { from: string; to: string } {
   end.setDate(end.getDate() + 1);
   return { from: start.toISOString(), to: end.toISOString() };
 }
+
+/** A local calendar day as YYYY-MM-DD. */
+export function isoDay(d: Date = new Date()): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+export function shiftDay(day: string, delta: number): string {
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  return isoDay(new Date(y, m - 1, d + delta));
+}
+
+export const periods = {
+  today: () => ({ from: isoDay(), to: isoDay() }),
+  yesterday: () => ({ from: shiftDay(isoDay(), -1), to: shiftDay(isoDay(), -1) }),
+  week: () => ({ from: shiftDay(isoDay(), -6), to: isoDay() }),
+  month: () => {
+    const n = new Date();
+    return { from: isoDay(new Date(n.getFullYear(), n.getMonth(), 1)), to: isoDay() };
+  },
+  lastMonth: () => {
+    const n = new Date();
+    return {
+      from: isoDay(new Date(n.getFullYear(), n.getMonth() - 1, 1)),
+      to: isoDay(new Date(n.getFullYear(), n.getMonth(), 0)),
+    };
+  },
+} as const;
+
+export const periodLabels: Record<keyof typeof periods, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  week: "Last 7 days",
+  month: "This month",
+  lastMonth: "Last month",
+};

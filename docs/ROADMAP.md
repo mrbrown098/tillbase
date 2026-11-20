@@ -27,17 +27,18 @@ Source for the competitor facts: [pricing](https://www.granetpro.com/pricing.htm
 - [x] Desktop app: checkout, products, stock adjustment, sales, void, settings
 - [x] Staff PIN login, roles (owner, manager, cashier) and permissions
 - [x] Shifts: open with a float, cash in and out, close with a counted drawer and variance
+- [x] Business suite, slice 1: ingredients and recipes with real cost of goods, purchases with weighted-average cost and supplier payables, wastage valued at cost, running costs, attendance and payroll (monthly, daily, hourly, overtime, advances), profit and loss with break-even and per-item margins, business payments from the till drawer, daily automatic backups
 
 ## Planned phases
 
 **Phase 2: run a real shop day** (in progress)
 Staff and shifts (done), next: customers with loyalty points and a wallet, dual tax rates for cash and card, business-day cutoff so after-midnight sales belong to the right day, split payments in the checkout screen, CSV import and export of products.
 
-**Phase 3: restaurants**
+**Phase 3: restaurants** (next: fast-food billing)
 Floor plan and tables, open tabs, modifiers and combos, kitchen order tickets routed to stations, a kitchen display screen, split bills by item, seat or amount, delivery and takeaway order types.
 
-**Phase 4: back office**
-Suppliers and purchase orders, recipes with automatic ingredient deduction and real cost of goods, expiry tracking, operating expenses, profit and loss, supplier ledger, accountant export.
+**Phase 4: back office** (recipes, costs, purchases, payroll and profit and loss are done)
+Still to do: purchase orders, expiry tracking, supplier ledger statements, recurring expenses, accountant export.
 
 **Phase 5: more than one till and more than one shop**
 Several terminals on one local network, then multi-branch with sync when online, plus an owner dashboard.

@@ -744,3 +744,26 @@ tr.inactive td {
 .rail-foot > span {
   padding: 0 10px;
 }
+
+/* ---- Business screens ---- */
+.seg { display: inline-flex; border: 1px solid var(--line, #d9dce1); border-radius: 8px; overflow: hidden; }
+.seg button { padding: 6px 14px; border: 0; background: transparent; cursor: pointer; font: inherit; }
+.seg button.on { background: #1d4ed8; color: #fff; }
+.qty-input { width: 80px; text-align: right; }
+.bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; background: #eceef2; margin: 8px 0 12px; }
+.bar > span { display: block; height: 100%; }
+.legend { list-style: none; margin: 0; padding: 0; }
+.legend li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid #eceef2; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; }
+.warn-box { background: #fff7e0; border: 1px solid #f1d38a; border-radius: 8px; padding: 10px 14px; margin: 12px 0; }
+.warn-box p { margin: 4px 0; }
+.good { color: #0a7a3d; }
+.bad-text { color: #b42318; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 8px; }
+.chart div { flex: 1; background: #1d4ed8; border-radius: 3px 3px 0 0; min-height: 2px; }
+.chart-labels { display: flex; justify-content: space-between; font-size: 12px; color: #667085; }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.presets .btn.on { background: #1d4ed8; color: #fff; }
+.tabs-inline { display: flex; gap: 6px; margin-bottom: 12px; }
+.presets input[type="date"] { width: auto; }
