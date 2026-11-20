@@ -3,18 +3,26 @@ import type { Permission } from "@tillbase/core";
 import { api } from "./api";
 import { Checkout } from "./Checkout";
 import { useApp } from "./context";
+import { Costs } from "./Costs";
 import { Login, Setup } from "./Login";
+import { Money } from "./Money";
 import { Products } from "./Products";
+import { Purchases } from "./Purchases";
 import { Sales } from "./Sales";
 import { Settings } from "./Settings";
 import { ShiftScreen } from "./Shift";
 import { ChangeOwnPin, Staff } from "./Staff";
+import { Team } from "./Team";
 
 const tabs: { id: string; label: string; needs: Permission }[] = [
   { id: "checkout", label: "Checkout", needs: "sell" },
   { id: "shift", label: "Shift", needs: "sell" },
   { id: "sales", label: "Sales", needs: "sell" },
-  { id: "products", label: "Products", needs: "products.manage" },
+  { id: "money", label: "Money", needs: "finance.view" },
+  { id: "products", label: "Menu and stock", needs: "products.manage" },
+  { id: "purchases", label: "Purchases", needs: "purchases.manage" },
+  { id: "costs", label: "Running costs", needs: "expenses.manage" },
+  { id: "team", label: "Team and wages", needs: "attendance.manage" },
   { id: "staff", label: "Staff", needs: "users.manage" },
   { id: "settings", label: "Settings", needs: "settings.manage" },
 ];
@@ -98,7 +106,11 @@ function Shell() {
         {active === "checkout" && <Checkout onOpenShift={() => setTab("shift")} />}
         {active === "shift" && <ShiftScreen />}
         {active === "sales" && <Sales />}
+        {active === "money" && <Money />}
         {active === "products" && <Products />}
+        {active === "purchases" && <Purchases />}
+        {active === "costs" && <Costs />}
+        {active === "team" && <Team />}
         {active === "staff" && <Staff />}
         {active === "settings" && <Settings />}
       </main>
