@@ -13,6 +13,8 @@ import type {
   Expense,
   ExpenseCategory,
   ExpenseInput,
+  ImportIssue,
+  ImportRowResult,
   PayMethod,
   Payables,
   Payslip,
@@ -73,6 +75,37 @@ export interface RosterEntry {
 }
 
 export type StaffInput = { name: string; pin: string; role: Role };
+
+/** A .csv file the person picked in the open dialog. The main process read it; the page never sees a path. */
+export interface ProductCsvFile {
+  name: string;
+  text: string;
+}
+
+/** The choices on the import screen. Anything left out takes the safe default. */
+export interface ProductCsvOptions {
+  /** Change items that are already in Tillbase. Default true. */
+  updateExisting?: boolean;
+  /** Also correct stock counts of items already in Tillbase. Default false. */
+  fixStock?: boolean;
+  /** Save the good rows and skip the bad ones. Default false: one bad row means nothing is saved. */
+  skipBadRows?: boolean;
+}
+
+/** What a preview says would happen, or what an import did. Row numbers count the header as row 1. */
+export interface ProductCsvReport {
+  /** True for a preview. */
+  dryRun: boolean;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  stockAdjustments: number;
+  rows: ImportRowResult[];
+  issues: ImportIssue[];
+  /** True when nothing was saved (a preview, or an import that was refused or rolled back). */
+  nothingWritten: boolean;
+}
 
 /**
  * Everything the user interface may ask the app to do. The main process
@@ -177,6 +210,14 @@ export interface TillbaseApi {
   updateStaff(id: string, patch: { name?: string; role?: Role; active?: boolean }): Promise<User>;
   resetPin(userId: string, newPin: string): Promise<void>;
   changeOwnPin(currentPin: string, newPin: string): Promise<void>;
+
+  // Menu items as CSV (products.manage). Ingredients are not part of the file.
+  chooseProductCsv(): Promise<ProductCsvFile | null>;
+  productCsvTemplate(): Promise<string>;
+  exportProductCsv(): Promise<string>;
+  saveCsvFile(suggestedName: string, text: string): Promise<string | null>;
+  previewProductCsv(text: string, options?: ProductCsvOptions): Promise<ProductCsvReport>;
+  importProductCsv(text: string, options?: ProductCsvOptions): Promise<ProductCsvReport>;
 }
 
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -222,4 +263,5 @@ export const channels: (keyof TillbaseApi)[] = [
   "updateStaff",
   "resetPin",
   "changeOwnPin",
+  "chooseProductCsv","productCsvTemplate","exportProductCsv","saveCsvFile","previewProductCsv","importProductCsv",
 ];
