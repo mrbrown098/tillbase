@@ -1,0 +1,111 @@
+# electron-builder configuration for the Tillbase desktop app.
+# Build with:  npm run dist -w @tillbase/desktop   (add --win, --mac or --linux as needed)
+# Installers are written to packages/desktop/release/.
+appId: com.tillbase.app
+productName: Tillbase
+copyright: Copyright (c) Tillbase contributors, MIT licensed
+
+directories:
+  output: release
+  buildResources: build
+
+# The renderer (Vite) and the main process (esbuild) are already bundled, including @tillbase/core.
+# The only runtime dependency left is the native SQLite module, so everything else is left out.
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+  - "!**/*.map"
+  - "!node_modules/react/**"
+  - "!node_modules/react-dom/**"
+  - "!node_modules/scheduler/**"
+  - "!node_modules/loose-envify/**"
+  - "!node_modules/js-tokens/**"
+  - "!node_modules/@tillbase/**"
+  - "!node_modules/better-sqlite3/deps/**"
+  - "!node_modules/better-sqlite3/src/**"
+  - "!node_modules/better-sqlite3/build/Release/obj/**"
+  - "!node_modules/better-sqlite3/build/Release/.deps/**"
+  - "!node_modules/better-sqlite3/build/Release/sqlite3.a"
+  - "!node_modules/better-sqlite3/build/Release/test_extension.node"
+
+# Installers are attached to GitHub Releases by .github/workflows/release.yml, not by electron-builder
+# (the scripts always pass --publish never). Declaring the provider keeps electron-builder from
+# failing while it writes its update metadata. The app does not contain an auto-updater.
+publish:
+  provider: github
+  owner: mrbrown098
+  repo: tillbase
+  releaseType: draft
+
+# A native module cannot be loaded from inside an asar archive.
+asar: true
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+
+# Rebuild (or download the prebuilt binary of) better-sqlite3 for the Electron version and the
+# target platform and architecture of each installer.
+npmRebuild: true
+
+# The packaged app's name decides the app-data folder (userData). Without this it would be
+# "@tillbase/desktop". With it, the database lives in the normal per-user folder:
+#   Windows %APPDATA%\Tillbase    macOS ~/Library/Application Support/Tillbase    Linux ~/.config/Tillbase
+extraMetadata:
+  productName: Tillbase
+  author: Tillbase contributors <noreply@tillbase.invalid>
+  homepage: https://github.com/mrbrown098/tillbase
+  desktopName: tillbase.desktop
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  artifactName: Tillbase-${version}-win-x64-setup.${ext}
+  oneClick: false
+  perMachine: false # installs for the current user, no administrator rights needed
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Tillbase
+  deleteAppDataOnUninstall: false # uninstalling never deletes the shop's data
+
+mac:
+  icon: build/icon.icns
+  category: public.app-category.business
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  # No signing certificate yet, so electron-builder does not sign; the afterPack hook below ad-hoc
+  # signs the app instead. See docs/RELEASING.md for what this means for users.
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+
+afterPack: ../../scripts/adhoc-sign.cjs
+
+dmg:
+  artifactName: Tillbase-${version}-mac-${arch}.${ext}
+  title: Tillbase ${version}
+
+linux:
+  icon: build/icon.png
+  executableName: tillbase
+  syncDesktopName: true
+  category: Office
+  synopsis: Free offline point of sale for shops and restaurants
+  description: Tillbase is a free, open source, offline-first point of sale and business suite for shops and fast-food restaurants.
+  maintainer: Tillbase contributors <noreply@tillbase.invalid>
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+
+appImage:
+  artifactName: Tillbase-${version}-linux-x86_64.${ext}
+
+deb:
+  artifactName: Tillbase-${version}-linux-amd64.${ext}
