@@ -5,6 +5,11 @@ import type {
   Modifier,
   ModifierInput,
   Order,
+  Customer,
+  CustomerHistory,
+  CustomerInput,
+  LedgerEntry,
+  LoyaltyConfig,
   OrderInput,
   PaymentInput,
   CheckoutInput,
@@ -159,8 +164,27 @@ export interface TillbaseApi {
   kitchenBoard(): Promise<Order[]>;
   setKitchenStatus(orderId: string, status: KitchenStatus): Promise<Order>;
   cancelOrder(orderId: string, reason: string): Promise<Order>;
-  payOrder(orderId: string, payments: PaymentInput[]): Promise<CheckoutResult>;
+  payOrder(
+    orderId: string,
+    payments: PaymentInput[],
+    /** Points to use as a discount and wallet money to spend, for the customer attached to the order. */
+    loyalty?: { redeemPoints?: number; walletMinor?: number },
+  ): Promise<CheckoutResult>;
   /** Move the chosen items (or part of a line's quantity) to a new open bill for the same table. */
+  // Customers, points and wallet
+  searchCustomers(query: string): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer>;
+  createCustomer(input: CustomerInput): Promise<Customer>;
+  updateCustomer(id: string, patch: Partial<CustomerInput>): Promise<Customer>;
+  /** Orders and spend. `totalSpentMinor` is null unless the signed-in person is the owner. */
+  customerHistory(id: string): Promise<CustomerHistory>;
+  customerLedger(id: string): Promise<LedgerEntry[]>;
+  adjustCustomerPoints(id: string, delta: number, note: string): Promise<Customer>;
+  adjustCustomerWallet(id: string, deltaMinor: number, note: string): Promise<Customer>;
+  /** Cash goes into the open shift's drawer record; card does not touch the drawer. */
+  topUpWallet(id: string, amountMinor: number, method: "cash" | "card", note?: string): Promise<Customer>;
+  getLoyalty(): Promise<LoyaltyConfig>;
+  setLoyalty(config: LoyaltyConfig): Promise<LoyaltyConfig>;
   splitOrder(orderId: string, picks: { itemId: string; qty: number }[]): Promise<{ original: Order; created: Order }>;
 
   // Menu, ingredients and recipes
@@ -253,6 +277,8 @@ export const channels: (keyof TillbaseApi)[] = [
   "modifiers","addModifier","updateModifier","openOrders","createOrder","updateOrder",
   "addOrderItem","setOrderItemQty","removeOrderItem","sendToKitchen","kitchenBoard",
   "setKitchenStatus","cancelOrder","payOrder","splitOrder",
+  "searchCustomers","getCustomer","createCustomer","updateCustomer","customerHistory","customerLedger",
+  "adjustCustomerPoints","adjustCustomerWallet","topUpWallet","getLoyalty","setLoyalty",
   "listItems","getRecipe","setRecipe","recipeCosts",
   "recordPurchase","payPurchase","listPurchases","payables",
   "expenseCategories","addExpenseCategory","addExpense","voidExpense","listExpenses",

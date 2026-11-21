@@ -14,6 +14,10 @@
     "./money": {
       "types": "./dist/money.d.ts",
       "default": "./dist/money.js"
+    },
+    "./discount": {
+      "types": "./dist/discount.d.ts",
+      "default": "./dist/discount.js"
     }
   },
   "scripts": {
