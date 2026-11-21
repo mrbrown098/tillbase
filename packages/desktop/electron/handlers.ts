@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  AccountingExportService,
   ExpenseService,
   FinanceService,
   InventoryService,
@@ -53,6 +54,7 @@ export function createHandlers(
     files?: {
       openCsv: () => Promise<ProductCsvFile | null>;
       saveCsv: (suggestedName: string, text: string) => Promise<string | null>;
+      saveFiles?: (files: { name: string; text: string }[]) => Promise<{ folder: string; names: string[] } | null>;
     };
   } = {},
 ): TillbaseApi {
@@ -68,6 +70,7 @@ export function createHandlers(
   const expenses = new ExpenseService(db);
   const labour = new LabourService(db);
   const finance = new FinanceService(db);
+  const accounting = new AccountingExportService(db);
   const orders = new OrderService(db, receiptPrefix);
   const productCsv = new ProductCsvService(db);
 
@@ -547,6 +550,13 @@ export function createHandlers(
     async profitAndLoss(from, to) {
       authorize("finance.view");
       return finance.profitAndLoss(from, to);
+    },
+    async exportAccounting(from, to) {
+      authorize("finance.view");
+      if (!hooks.files?.saveFiles) throw new Error("Saving files is not available here");
+      // Built first so a bad date range is reported before any folder window opens.
+      const files = accounting.all(from, to).map((f) => ({ name: f.name, text: f.csv }));
+      return hooks.files.saveFiles(files);
     },
     async backupNow() {
       authorize("settings.manage");

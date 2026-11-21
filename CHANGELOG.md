@@ -2,6 +2,11 @@
 
 All notable changes to Tillbase are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Export for your accountant: on the Money screen (owner only), save five Excel-ready CSV files for any date range: sales by day with tax, running costs by category, purchases, payroll, and profit and loss.
+
 ## [0.4.0] - 2026-11-21
 
 First tagged release. Everything below was built between 17 and 21 November 2026; earlier work had no release numbers, so this entry describes the whole product as of today.
