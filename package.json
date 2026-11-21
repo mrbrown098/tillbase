@@ -17,7 +17,7 @@
     "rebuild:node": "npm rebuild better-sqlite3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
     "playwright-core": "^1.65.1"
