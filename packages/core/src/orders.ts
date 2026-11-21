@@ -71,8 +71,12 @@ export interface Order {
   sentAt: string | null;
   saleId: string | null;
   cancelReason: string | null;
+  /** What a delivery order charges on top of the food (minor units). Always 0 for other types. No tax is added to it. */
+  deliveryFeeMinor: number;
+  /** The order this bill was split from, if it was made by splitting a bill. */
+  splitFrom: string | null;
   items: OrderItem[];
-  /** Before tax. Tax is worked out when the order is paid. */
+  /** The food only, before tax and without the delivery charge. Tax is worked out when the order is paid. */
   subtotalMinor: number;
 }
 
@@ -82,6 +86,8 @@ export interface OrderInput {
   customerName?: string | null;
   customerPhone?: string | null;
   deliveryAddress?: string | null;
+  /** Delivery orders only: the delivery charge in minor units, a whole number, 0 or more. */
+  deliveryFeeMinor?: number;
   note?: string | null;
   userId?: string;
 }
@@ -111,9 +117,19 @@ interface OrderRow {
   sent_at: string | null;
   sale_id: string | null;
   cancel_reason: string | null;
+  delivery_fee_minor: number;
+  split_from: string | null;
 }
 
 const clean = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);
+
+/** A delivery charge is money: a whole number of minor units, 0 or more. */
+function checkFee(v: unknown): number {
+  if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 0) {
+    throw new Error("The delivery charge must be a whole amount, 0 or more");
+  }
+  return v;
+}
 
 /** Orders for fast-food and restaurants: tokens, held orders, add-ons and the kitchen. */
 export class OrderService {
@@ -190,6 +206,8 @@ export class OrderService {
     const type = this.checkType(input.type);
     const table = clean(input.tableLabel);
     if (type === "dine_in" && table) this.assertTableFree(table);
+    const fee = input.deliveryFeeMinor === undefined ? 0 : checkFee(input.deliveryFeeMinor);
+    if (fee > 0 && type !== "delivery") throw new Error("Only delivery orders have a delivery charge");
     const id = randomUUID();
     this.db.transaction(() => {
       const date = localDate();
@@ -198,15 +216,15 @@ export class OrderService {
       this.db
         .prepare(
           `INSERT INTO orders (id, token_date, token, type, table_label, customer_name, customer_phone,
-             delivery_address, note, user_id, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             delivery_address, note, user_id, created_at, delivery_fee_minor)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id, date, token, type,
           type === "dine_in" ? table : null,
           clean(input.customerName), clean(input.customerPhone),
           type === "delivery" ? clean(input.deliveryAddress) : null,
-          clean(input.note), input.userId ?? null, new Date().toISOString(),
+          clean(input.note), input.userId ?? null, new Date().toISOString(), fee,
         );
     })();
     return this.mustGet(id);
@@ -218,11 +236,17 @@ export class OrderService {
     const type = patch.type ? this.checkType(patch.type) : o.type;
     const table = patch.tableLabel === undefined ? o.tableLabel : clean(patch.tableLabel);
     if (type === "dine_in" && table) this.assertTableFree(table, orderId);
+    const wantedFee = patch.deliveryFeeMinor === undefined ? o.deliveryFeeMinor : checkFee(patch.deliveryFeeMinor);
+    if (patch.deliveryFeeMinor !== undefined && wantedFee > 0 && type !== "delivery") {
+      throw new Error("Only delivery orders have a delivery charge");
+    }
+    // Changing a delivery order into something else drops its delivery charge, like its address.
+    const fee = type === "delivery" ? wantedFee : 0;
     const pick = <T>(p: T | undefined, cur: T) => (p === undefined ? cur : p);
     this.db
       .prepare(
         `UPDATE orders SET type = ?, table_label = ?, customer_name = ?, customer_phone = ?,
-           delivery_address = ?, note = ? WHERE id = ?`,
+           delivery_address = ?, note = ?, delivery_fee_minor = ? WHERE id = ?`,
       )
       .run(
         type,
@@ -231,6 +255,7 @@ export class OrderService {
         clean(pick(patch.customerPhone, o.customerPhone)),
         type === "delivery" ? clean(pick(patch.deliveryAddress, o.deliveryAddress)) : null,
         clean(pick(patch.note, o.note)),
+        fee,
         orderId,
       );
     return this.mustGet(orderId);
@@ -239,10 +264,10 @@ export class OrderService {
   addItem(orderId: string, input: { productId: string; qty: number; modifierIds?: string[]; note?: string | null }): Order {
     this.mustOpen(orderId);
     if (!(input.qty > 0) || !Number.isFinite(input.qty)) throw new Error("Quantity must be greater than zero");
-    const p = this.db.prepare("SELECT kind, active, name FROM products WHERE id = ?").get(input.productId) as
-      | { kind: string; active: number; name: string }
+    const p = this.db.prepare("SELECT kind, active, name, is_system FROM products WHERE id = ?").get(input.productId) as
+      | { kind: string; active: number; name: string; is_system: number }
       | undefined;
-    if (!p) throw new Error("Product not found");
+    if (!p || p.is_system) throw new Error("Product not found");
     if (p.kind !== "product") throw new Error(`${p.name} is an ingredient and cannot be sold`);
     if (!p.active) throw new Error(`${p.name} is not active`);
 
@@ -351,12 +376,18 @@ export class OrderService {
       const o = this.mustOpen(orderId);
       if (o.items.length === 0) throw new Error("The order has no items");
 
+      // The delivery charge is the last line of the sale, with no tax, so the receipt, the totals
+      // and the Money screen all count it as income. It uses a hidden product the app makes for itself.
+      const fee = o.type === "delivery" ? o.deliveryFeeMinor : 0;
       const sale = this.sales.checkout({
-        lines: o.items.map((i) => ({
-          productId: i.productId,
-          qty: i.qty,
-          unitPriceMinor: i.unitPriceMinor + i.modifiers.reduce((s, m) => s + m.priceMinor, 0),
-        })),
+        lines: [
+          ...o.items.map((i) => ({
+            productId: i.productId,
+            qty: i.qty,
+            unitPriceMinor: i.unitPriceMinor + i.modifiers.reduce((s, m) => s + m.priceMinor, 0),
+          })),
+          ...(fee > 0 ? [{ productId: this.deliveryFeeProductId(), qty: 1, unitPriceMinor: fee }] : []),
+        ],
         payments: input.payments,
         cashier: input.cashier,
         shiftId: input.shiftId,
@@ -368,7 +399,7 @@ export class OrderService {
       const saleItems = this.db
         .prepare("SELECT id, name FROM sale_items WHERE sale_id = ? ORDER BY rowid")
         .all(sale.id) as { id: string; name: string }[];
-      if (saleItems.length !== o.items.length) throw new Error("Order lines did not match the sale");
+      if (saleItems.length !== o.items.length + (fee > 0 ? 1 : 0)) throw new Error("Order lines did not match the sale");
       const full = this.db.prepare("SELECT id, product_id AS pid, modifiers FROM order_items WHERE order_id = ? ORDER BY rowid").all(orderId) as {
         id: string; pid: string; modifiers: string;
       }[];
@@ -413,6 +444,95 @@ export class OrderService {
     })();
   }
 
+  // ---- Splitting a bill ------------------------------------------------------
+
+  /**
+   * Move some items (or part of a line's quantity) to a NEW open order with its own token, the same
+   * table and the same type, so a group can pay separately. Nothing is added, removed or repriced:
+   * the two bills together hold exactly what the original did.
+   *
+   * - The original must keep at least one item.
+   * - Moving part of a line takes whole units (1 of 3), so line totals add up to the cent.
+   * - Anything already sent to the kitchen stays marked as sent on both bills, so it is not cooked twice.
+   * - A delivery charge stays on the original bill.
+   */
+  splitItems(
+    orderId: string,
+    picks: { itemId: string; qty: number }[],
+    opts: { userId?: string } = {},
+  ): { original: Order; created: Order } {
+    return this.db.transaction((): { original: Order; created: Order } => {
+      const o = this.mustOpen(orderId);
+      if (!Array.isArray(picks) || picks.length === 0) throw new Error("Choose at least one item to move to the new bill");
+
+      const byId = new Map(o.items.map((i) => [i.id, i]));
+      const seen = new Set<string>();
+      const plan: { item: OrderItem; qty: number; whole: boolean }[] = [];
+      for (const pick of picks) {
+        const item = byId.get(pick.itemId);
+        if (!item) throw new Error("One of the chosen items is not on this order");
+        if (seen.has(pick.itemId)) throw new Error(`${item.name} was chosen twice`);
+        seen.add(pick.itemId);
+        if (typeof pick.qty !== "number" || !(pick.qty > 0) || !Number.isFinite(pick.qty)) {
+          throw new Error("Quantity must be greater than zero");
+        }
+        if (pick.qty > item.qty + 1e-9) {
+          throw new Error(`There are only ${tidy(item.qty)} ${item.name} on this bill`);
+        }
+        const whole = Math.abs(pick.qty - item.qty) < 1e-9;
+        if (!whole && !Number.isInteger(pick.qty)) {
+          throw new Error(`Only whole quantities can be moved off a line (for example 1 of 3 ${item.name})`);
+        }
+        plan.push({ item, qty: whole ? item.qty : pick.qty, whole });
+      }
+      const movedWhole = new Set(plan.filter((p) => p.whole).map((p) => p.item.id));
+      if (o.items.every((i) => movedWhole.has(i.id))) {
+        throw new Error("The original bill must keep at least one item. To pay for everything, just pay the bill");
+      }
+
+      const newId = randomUUID();
+      const now = new Date().toISOString();
+      const date = localDate();
+      const token =
+        (this.db.prepare("SELECT COALESCE(MAX(token), 0) AS t FROM orders WHERE token_date = ?").get(date) as { t: number }).t + 1;
+      const userId = opts.userId ?? (this.db.prepare("SELECT user_id FROM orders WHERE id = ?").get(orderId) as { user_id: string | null }).user_id;
+      this.db
+        .prepare(
+          `INSERT INTO orders (id, token_date, token, type, table_label, customer_name, customer_phone,
+             delivery_address, note, user_id, created_at, split_from)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+        )
+        .run(newId, date, token, o.type, o.tableLabel, o.customerName, o.customerPhone, o.deliveryAddress, userId, now, orderId);
+
+      const raw = this.db.prepare("SELECT note, modifiers, sent_at FROM order_items WHERE id = ?");
+      for (const { item, qty, whole } of plan) {
+        if (whole) {
+          this.db.prepare("UPDATE order_items SET order_id = ? WHERE id = ?").run(newId, item.id);
+        } else {
+          const r = raw.get(item.id) as { note: string | null; modifiers: string; sent_at: string | null };
+          this.db.prepare("UPDATE order_items SET qty = ? WHERE id = ?").run(tidy(item.qty - qty), item.id);
+          this.db
+            .prepare("INSERT INTO order_items (id, order_id, product_id, qty, note, modifiers, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .run(randomUUID(), newId, item.productId, qty, r.note, r.modifiers, r.sent_at);
+        }
+      }
+
+      // Kitchen: each bill shows on the board only if it holds something that was sent.
+      const newHasSent = plan.some((p) => p.item.sent);
+      if (newHasSent) {
+        this.db
+          .prepare("UPDATE orders SET sent_at = ?, kitchen_status = ? WHERE id = ?")
+          .run(o.sentAt ?? now, o.kitchenStatus ?? "new", newId);
+      }
+      const originalKeepsSent = o.items.some((i) => i.sent && !movedWhole.has(i.id));
+      if (!originalKeepsSent && o.sentAt) {
+        this.db.prepare("UPDATE orders SET sent_at = NULL, kitchen_status = NULL WHERE id = ?").run(orderId);
+      }
+
+      return { original: this.mustGet(orderId), created: this.mustGet(newId) };
+    })();
+  }
+
   // ---- internals -------------------------------------------------------------
 
   private checkType(t: string): OrderType {
@@ -420,13 +540,49 @@ export class OrderService {
     return t as OrderType;
   }
 
+  /** The hidden product the delivery charge is sold as. Made the first time it is needed. */
+  private deliveryFeeProductId(): string {
+    const found = this.db.prepare("SELECT id FROM products WHERE is_system = 1 AND name = 'Delivery fee'").get() as
+      | { id: string }
+      | undefined;
+    if (found) return found.id;
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO products (id, name, price_minor, cost_minor, tax_rate_bp, track_stock, reorder_level, active,
+           created_at, updated_at, kind, unit, avg_cost, is_system)
+         VALUES (?, 'Delivery fee', 0, 0, 0, 0, 0, 1, ?, ?, 'product', 'pcs', 0, 1)`,
+      )
+      .run(id, now, now);
+    return id;
+  }
+
+  /** The first bill a split chain started from (the order itself if it was never split). */
+  private rootOf(orderId: string): string {
+    let cur = orderId;
+    for (let i = 0; i < 100; i++) {
+      const r = this.db.prepare("SELECT split_from FROM orders WHERE id = ?").get(cur) as { split_from: string | null } | undefined;
+      if (!r?.split_from) return cur;
+      cur = r.split_from;
+    }
+    return cur;
+  }
+
+  /**
+   * One open dine-in order per table, except that bills split from the same order share their table.
+   * Without that, editing either bill after a split would be refused.
+   */
   private assertTableFree(label: string, exceptOrderId?: string) {
-    const r = this.db
+    const others = this.db
       .prepare(
         "SELECT id FROM orders WHERE status = 'open' AND type = 'dine_in' AND table_label = ? COLLATE NOCASE AND id <> ?",
       )
-      .get(label, exceptOrderId ?? "") as { id: string } | undefined;
-    if (r) throw new Error(`Table ${label} already has an open order`);
+      .all(label, exceptOrderId ?? "") as { id: string }[];
+    const family = exceptOrderId ? this.rootOf(exceptOrderId) : null;
+    if (others.some((r) => family === null || this.rootOf(r.id) !== family)) {
+      throw new Error(`Table ${label} already has an open order`);
+    }
   }
 
   private mustGet(id: string): Order {
@@ -471,7 +627,8 @@ export class OrderService {
       id: r.id, token: r.token, type: r.type, tableLabel: r.table_label, customerName: r.customer_name,
       customerPhone: r.customer_phone, deliveryAddress: r.delivery_address, note: r.note, status: r.status,
       kitchenStatus: r.kitchen_status, createdAt: r.created_at, sentAt: r.sent_at, saleId: r.sale_id,
-      cancelReason: r.cancel_reason, items, subtotalMinor: items.reduce((s, i) => s + i.lineMinor, 0),
+      cancelReason: r.cancel_reason, deliveryFeeMinor: r.delivery_fee_minor, splitFrom: r.split_from,
+      items, subtotalMinor: items.reduce((s, i) => s + i.lineMinor, 0),
     };
   }
 }

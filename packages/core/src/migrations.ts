@@ -333,6 +333,19 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    version: 5,
+    sql: `
+      -- Delivery fees, and bills split by items.
+      -- is_system marks a product the app creates for itself (the delivery fee line on a sale).
+      -- It is never listed, searched, exported, imported or counted as stock.
+      ALTER TABLE products ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;
+      -- What a delivery order charges on top of its food, in minor units.
+      ALTER TABLE orders ADD COLUMN delivery_fee_minor INTEGER NOT NULL DEFAULT 0 CHECK (delivery_fee_minor >= 0);
+      -- The order a bill was split from, if it was made by splitting.
+      ALTER TABLE orders ADD COLUMN split_from TEXT REFERENCES orders(id);
+    `,
+  },
 ];
 
 /** Apply any migrations that have not run yet. Safe to call on every start. */

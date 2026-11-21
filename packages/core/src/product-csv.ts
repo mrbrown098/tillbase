@@ -649,7 +649,7 @@ export class ProductCsvService {
     for (const [column, value] of lookups) {
       const row = this.db
         .prepare(
-          `SELECT id FROM products WHERE ${column} = ? COLLATE NOCASE AND kind = 'product' ORDER BY created_at LIMIT 1`,
+          `SELECT id FROM products WHERE ${column} = ? COLLATE NOCASE AND kind = 'product' AND is_system = 0 ORDER BY created_at LIMIT 1`,
         )
         .get(value) as { id: string } | undefined;
       if (row) return this.products.get(row.id);

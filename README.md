@@ -18,8 +18,8 @@ Sell, take orders, run the kitchen, track stock and recipes, record purchases an
 ## What it does
 
 **Selling**
-- **Checkout** for counter sales: scan a barcode or search, change quantities, line discounts, tax, cash or card, change due, receipts for 58mm and 80mm printers.
-- **Orders** for fast-food and restaurants: a token number that restarts each day, dine-in, takeaway and delivery, table or customer details, add-ons such as extra cheese (with their own price and ingredient cost), several orders held open at once, paid in one tap. Every edit is saved immediately.
+- **Checkout** for counter sales: scan a barcode or search, change quantities, line discounts, tax, cash or card, change due, receipts for 58mm and 80mm printers. **Split payments:** one sale can be paid with cash, card and other together (the screen shows what is remaining, and change only comes out of cash). Exact cash or card is still one tap.
+- **Orders** for fast-food and restaurants: a token number that restarts each day, dine-in, takeaway and delivery, table or customer details, add-ons such as extra cheese (with their own price and ingredient cost), several orders held open at once, paid in one tap. Delivery orders can carry a delivery charge, which is shown before payment and counted as income. A dine-in group can **split the bill by items** into separate bills, each with its own token, and pay separately. Every edit is saved immediately.
 - **Kitchen** board and tickets: only new items are sent; orders move new, preparing, ready, served; late orders turn red. Only a manager can change or cancel food already in the kitchen.
 - **Sales:** today's totals by payment method, top products, recent sales, reprint, void (stock is restored exactly).
 
@@ -41,7 +41,6 @@ Sell, take orders, run the kitchen, track stock and recipes, record purchases an
 
 | Work | What |
 |---|---|
-| Delivery and payments | Delivery fees, split payments in the pay screen, splitting a dine-in bill by items |
 | Installers and CI | Windows, macOS and Linux installers on GitHub Releases, and automatic tests on all three systems |
 | Business mode and sponsors | Retail / restaurant mode switch, first-run guide, sponsor banner slots |
 
@@ -117,7 +116,7 @@ Amounts are in minor units and tax rates in basis points: `1800` means 18.00%.
 - [x] Fast-food orders, add-ons and kitchen board
 - [x] Menu CSV import and export
 - [x] Daily backups
-- [ ] Delivery fees, split payments, split bills
+- [x] Delivery fees, split payments, split bills
 - [ ] Installers for Windows, macOS and Linux; CI on all three
 - [ ] Business mode switch, first-run guide, sponsor banners
 - [ ] First-run currency and country; business-day cutoff

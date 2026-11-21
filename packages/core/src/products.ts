@@ -213,7 +213,7 @@ export class ProductService {
   /** Exact barcode match among active products sold at the till. Used by the scanner. */
   findByBarcode(barcode: string): Product | undefined {
     const row = this.db
-      .prepare("SELECT * FROM products WHERE barcode = ? AND active = 1 AND kind = 'product'")
+      .prepare("SELECT * FROM products WHERE barcode = ? AND active = 1 AND kind = 'product' AND is_system = 0")
       .get(barcode.trim()) as Row | undefined;
     return row ? fromRow(row) : undefined;
   }
@@ -224,7 +224,7 @@ export class ProductService {
     const rows = this.db
       .prepare(
         `SELECT * FROM products
-          WHERE active = 1 AND kind = ?
+          WHERE active = 1 AND kind = ? AND is_system = 0
             AND (name LIKE ? ESCAPE '\\' OR sku LIKE ? ESCAPE '\\' OR barcode LIKE ? ESCAPE '\\')
           ORDER BY name LIMIT ?`,
       )
@@ -233,7 +233,8 @@ export class ProductService {
   }
 
   list(opts: { includeInactive?: boolean; kind?: ProductKind } = {}): Product[] {
-    const where: string[] = [];
+    // Products the app makes for itself (the delivery fee line) are never listed.
+    const where: string[] = ["is_system = 0"];
     const args: unknown[] = [];
     if (!opts.includeInactive) where.push("active = 1");
     if (opts.kind) {

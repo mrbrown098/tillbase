@@ -25,6 +25,8 @@ Data flow: a screen calls `api.something()` -> preload -> IPC -> `createHandlers
 7. **Be honest in the UI.** If a number may be wrong (missing cost, estimated wages) the screen must say so. Do not claim tax-authority approval.
 8. **Services throw `Error` with a plain message safe to show a cashier.**
 9. Prefer plain, kind wording on screens: this is used by shop and restaurant staff, not accountants.
+10. **Hidden system products.** `products.is_system = 1` marks a product the app makes for itself (today only the "Delivery fee" line on a sale). It must never appear in a list, search, barcode lookup, stock or low-stock view, CSV export or import match, or best-sellers, and it must not raise the "item has no cost" warning. Any new query over `products` that people see or match against needs `is_system = 0`; the delivery-fee test in `packages/core/test/orders.test.ts` checks each place, so extend it when you add one.
+11. **Split bills share their table.** Orders made by `splitItems` carry `split_from`; the one-open-order-per-table rule treats orders from the same split chain as one family. Splitting never changes a price or removes an item, and a delivery charge stays on the original bill.
 
 ## Running things
 
@@ -59,7 +61,8 @@ npm run app                # prepare SQLite for Electron, build everything, open
 | Area | Core | Screen |
 |---|---|---|
 | Selling | `sales.ts`, `receipt.ts` | `Checkout.tsx`, `Sales.tsx` |
-| Orders, add-ons, kitchen | `orders.ts` | `Orders.tsx`, `Kitchen.tsx` |
+| Orders, add-ons, kitchen, delivery fee, split bills | `orders.ts` | `Orders.tsx`, `Kitchen.tsx` |
+| Pay screen (several payments) | `sales.ts` | `Checkout.tsx` (`PayModal`), `payments.ts` |
 | Products, recipes, stock | `products.ts`, `recipes.ts`, `inventory.ts` | `Products.tsx` |
 | Purchases, expenses | `purchases.ts`, `expenses.ts` | `Purchases.tsx`, `Costs.tsx` |
 | Wages | `labour.ts` | `Team.tsx` |

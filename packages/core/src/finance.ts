@@ -159,12 +159,13 @@ export class FinanceService {
     const itemRows = this.db
       .prepare(
         `SELECT si.product_id AS productId, si.name AS name, SUM(si.qty) AS qty,
-                SUM(si.total_minor - si.tax_minor) AS sales, SUM(si.cogs_minor) AS cogs
-           FROM sale_items si JOIN sales s ON s.id = si.sale_id
+                SUM(si.total_minor - si.tax_minor) AS sales, SUM(si.cogs_minor) AS cogs,
+                p.is_system AS isSystem
+           FROM sale_items si JOIN sales s ON s.id = si.sale_id JOIN products p ON p.id = si.product_id
           WHERE s.status = 'completed' AND s.created_at >= ? AND s.created_at < ?
           GROUP BY si.product_id`,
       )
-      .all(startIso, endIso) as { productId: string; name: string; qty: number; sales: number; cogs: number }[];
+      .all(startIso, endIso) as { productId: string; name: string; qty: number; sales: number; cogs: number; isSystem: number }[];
     const items: ItemProfit[] = itemRows
       .map((r) => ({
         productId: r.productId,
@@ -174,7 +175,8 @@ export class FinanceService {
         cogsMinor: r.cogs,
         profitMinor: r.sales - r.cogs,
         marginPct: pct(r.sales - r.cogs, r.sales),
-        costMissing: r.cogs === 0 && r.sales > 0,
+        // The delivery fee is income with no goods behind it, so it never needs a cost.
+        costMissing: r.cogs === 0 && r.sales > 0 && r.isSystem === 0,
       }))
       .sort((a, b) => b.profitMinor - a.profitMinor);
 

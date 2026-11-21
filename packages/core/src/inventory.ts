@@ -97,7 +97,7 @@ export class InventoryService {
                 COALESCE(SUM(m.qty_delta), 0) AS stock
            FROM products p
            LEFT JOIN stock_movements m ON m.product_id = p.id
-          WHERE p.active = 1 AND p.track_stock = 1
+          WHERE p.active = 1 AND p.track_stock = 1 AND p.is_system = 0
           GROUP BY p.id
          HAVING stock <= p.reorder_level
           ORDER BY stock ASC, p.name`,

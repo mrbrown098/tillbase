@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { taxFor } from "@tillbase/core/money";
-import type { PaymentMethod } from "@tillbase/core";
+import type { PaymentInput, PaymentMethod } from "@tillbase/core";
 import type { ProductWithStock } from "../../shared/api";
 import { api } from "./api";
 import { useApp } from "./context";
 import { minorToInput, parseMoney } from "./format";
 import { Modal, ReceiptView } from "./Modal";
+import { methodLabel, summarizePayments } from "./payments";
 
 interface Line {
   product: ProductWithStock;
@@ -128,7 +129,7 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
     );
   };
 
-  const finish = async (method: PaymentMethod, tendered: number) => {
+  const finish = async (payments: PaymentInput[]) => {
     try {
       const { sale, receipt } = await api.checkout({
         lines: cart.map((l) => ({
@@ -136,7 +137,7 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
           qty: l.qty,
           discountMinor: l.discountMinor,
         })),
-        payments: [{ method, amountMinor: tendered }],
+        payments,
       });
       setCart([]);
       setPaying(false);
@@ -346,6 +347,11 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
   );
 }
 
+/**
+ * Take payment. The common case stays fast: one method, exact cash or card is a single tap
+ * (the amount is already filled in, and Enter completes). "Split payment" opens the longer view,
+ * where cash, card and other can be added one by one until nothing remains.
+ */
 export function PayModal({
   total,
   onClose,
@@ -353,13 +359,16 @@ export function PayModal({
 }: {
   total: number;
   onClose: () => void;
-  onConfirm: (method: PaymentMethod, tendered: number) => Promise<void>;
+  onConfirm: (payments: PaymentInput[]) => Promise<void>;
 }) {
   const { money } = useApp();
+  const [split, setSplit] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [text, setText] = useState(minorToInput(total));
+  const [added, setAdded] = useState<PaymentInput[]>([]);
   const [busy, setBusy] = useState(false);
 
+  // ---- one payment ----
   const tendered = method === "cash" ? parseMoney(text) : total;
   const short = tendered !== null && tendered < total;
   const valid = tendered !== null && !short;
@@ -372,30 +381,157 @@ export function PayModal({
     return [total, ...next.filter((n) => n !== total)];
   }, [total]);
 
-  const submit = async () => {
-    if (!valid || tendered === null || busy) return;
+  // ---- several payments ----
+  const summary = summarizePayments(total, added);
+  const amount = parseMoney(text);
+  const canAdd = amount !== null && amount > 0 && summary.remainingMinor > 0;
+
+  const send = async (payments: PaymentInput[]) => {
+    if (busy) return;
     setBusy(true);
     try {
-      await onConfirm(method, tendered);
+      await onConfirm(payments);
     } finally {
       setBusy(false);
     }
   };
 
+  const submit = async () => {
+    if (split) {
+      if (summary.ok) await send(added);
+      return;
+    }
+    if (!valid || tendered === null) return;
+    await send([{ method, amountMinor: tendered }]);
+  };
+
+  const startSplit = () => {
+    setSplit(true);
+    setMethod("cash");
+    setText(minorToInput(total));
+  };
+  const backToOne = () => {
+    setSplit(false);
+    setAdded([]);
+    setMethod("cash");
+    setText(minorToInput(total));
+  };
+  const addPayment = () => {
+    if (!canAdd || amount === null) return;
+    const next = [...added, { method, amountMinor: amount }];
+    setAdded(next);
+    const left = summarizePayments(total, next).remainingMinor;
+    setText(left > 0 ? minorToInput(left) : "");
+  };
+  const removePayment = (index: number) => {
+    const next = added.filter((_, i) => i !== index);
+    setAdded(next);
+    const left = summarizePayments(total, next).remainingMinor;
+    setText(left > 0 ? minorToInput(left) : "");
+  };
+
+  const methodButtons = (
+    <div className="methods" role="group" aria-label="Payment method">
+      {(["cash", "card", "other"] as const).map((m) => (
+        <button
+          key={m}
+          className={`btn btn-lg${method === m ? " btn-primary" : ""}`}
+          aria-pressed={method === m}
+          onClick={() => {
+            setMethod(m);
+            if (split && m !== method) setText(summary.remainingMinor > 0 ? minorToInput(summary.remainingMinor) : "");
+          }}
+        >
+          {methodLabel[m]}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (split) {
+    return (
+      <Modal title={`Split payment · ${money(total)}`} onClose={onClose}>
+        <dl className="split-summary">
+          <div>
+            <dt>Total</dt>
+            <dd>{money(total)}</dd>
+          </div>
+          <div>
+            <dt>Paid so far</dt>
+            <dd>{money(summary.paidMinor)}</dd>
+          </div>
+          <div className={summary.problem ? "split-problem" : summary.remainingMinor > 0 ? "split-remaining" : "split-covered"}>
+            <dt>Remaining</dt>
+            <dd>{money(summary.remainingMinor)}</dd>
+          </div>
+        </dl>
+
+        {added.length > 0 && (
+          <ul className="split-list" aria-label="Payments added">
+            {added.map((p, i) => (
+              <li key={i}>
+                <span>{methodLabel[p.method]}</span>
+                <strong>{money(p.amountMinor)}</strong>
+                <button className="btn btn-ghost" aria-label={`Remove ${methodLabel[p.method]} payment of ${money(p.amountMinor)}`} onClick={() => removePayment(i)}>
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {summary.remainingMinor > 0 && (
+          <>
+            {methodButtons}
+            <label className="field">
+              Amount
+              <input
+                autoFocus
+                inputMode="decimal"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") addPayment();
+                }}
+              />
+            </label>
+            <div className="quick">
+              <button className="btn" disabled={!canAdd} onClick={addPayment}>
+                Add {methodLabel[method].toLowerCase()} payment
+              </button>
+            </div>
+          </>
+        )}
+
+        <p className={`pay-status${summary.problem ? " bad" : ""}`} role={summary.problem ? "alert" : undefined}>
+          {summary.problem ??
+            (summary.remainingMinor > 0
+              ? amount === null && text.trim() !== ""
+                ? "Enter a valid amount"
+                : `Still to pay: ${money(summary.remainingMinor)}`
+              : summary.changeMinor > 0
+                ? `Covered. Change due: ${money(summary.changeMinor)}`
+                : "Covered. Ready to complete.")}
+        </p>
+
+        <div className="modal-actions">
+          <button className="btn" onClick={backToOne}>
+            Single payment
+          </button>
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary btn-lg" disabled={!summary.ok || busy} onClick={() => void submit()}>
+            Complete sale
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal title={`Take payment · ${money(total)}`} onClose={onClose}>
-      <div className="methods" role="group" aria-label="Payment method">
-        {(["cash", "card"] as const).map((m) => (
-          <button
-            key={m}
-            className={`btn btn-lg${method === m ? " btn-primary" : ""}`}
-            aria-pressed={method === m}
-            onClick={() => setMethod(m)}
-          >
-            {m === "cash" ? "Cash" : "Card"}
-          </button>
-        ))}
-      </div>
+      {methodButtons}
 
       {method === "cash" ? (
         <>
@@ -427,15 +563,22 @@ export function PayModal({
           </p>
         </>
       ) : (
-        <p className="muted">Charge {money(total)} on the card terminal, then confirm.</p>
+        <p className="muted">
+          {method === "card"
+            ? `Charge ${money(total)} on the card terminal, then confirm.`
+            : `Record ${money(total)} as paid by another method, then confirm.`}
+        </p>
       )}
 
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>
           Cancel
         </button>
+        <button className="btn" onClick={startSplit}>
+          Split payment
+        </button>
         <button className="btn btn-primary btn-lg" disabled={!valid || busy} onClick={() => void submit()}>
-          {method === "cash" ? "Complete sale" : "Card approved — complete sale"}
+          {method === "cash" ? "Complete sale" : method === "card" ? "Card approved — complete sale" : "Complete sale"}
         </button>
       </div>
     </Modal>

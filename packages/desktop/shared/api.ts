@@ -160,6 +160,8 @@ export interface TillbaseApi {
   setKitchenStatus(orderId: string, status: KitchenStatus): Promise<Order>;
   cancelOrder(orderId: string, reason: string): Promise<Order>;
   payOrder(orderId: string, payments: PaymentInput[]): Promise<CheckoutResult>;
+  /** Move the chosen items (or part of a line's quantity) to a new open bill for the same table. */
+  splitOrder(orderId: string, picks: { itemId: string; qty: number }[]): Promise<{ original: Order; created: Order }>;
 
   // Menu, ingredients and recipes
   listItems(kind?: ItemKind): Promise<ProductWithStock[]>;
@@ -248,7 +250,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "lowStock",
   "modifiers","addModifier","updateModifier","openOrders","createOrder","updateOrder",
   "addOrderItem","setOrderItemQty","removeOrderItem","sendToKitchen","kitchenBoard",
-  "setKitchenStatus","cancelOrder","payOrder",
+  "setKitchenStatus","cancelOrder","payOrder","splitOrder",
   "listItems","getRecipe","setRecipe","recipeCosts",
   "recordPurchase","payPurchase","listPurchases","payables",
   "expenseCategories","addExpenseCategory","addExpense","voidExpense","listExpenses",
