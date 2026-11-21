@@ -393,6 +393,11 @@ export function createHandlers(
       const sale = orders.pay(orderId, { payments, shiftId: shift.id, userId: user.id, cashier: user.name });
       return { sale, receipt: receipt(sale) };
     },
+    // Splitting does not remove any food or change a price, so any seller may do it, even for items already sent.
+    async splitOrder(orderId, picks) {
+      const user = authorize("sell");
+      return orders.splitItems(orderId, picks, { userId: user.id });
+    },
 
     // ---- Menu, ingredients and recipes --------------------------------
     async listItems(kind = "all") {

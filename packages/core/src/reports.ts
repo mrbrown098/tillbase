@@ -70,8 +70,9 @@ export class ReportService {
     const topProducts = this.db
       .prepare(
         `SELECT si.name AS name, SUM(si.qty) AS qty, SUM(si.total_minor) AS totalMinor
-           FROM sale_items si JOIN sales s ON s.id = si.sale_id
+           FROM sale_items si JOIN sales s ON s.id = si.sale_id JOIN products p ON p.id = si.product_id
           WHERE s.status = 'completed' AND s.created_at >= ? AND s.created_at < ?
+            AND p.is_system = 0
           GROUP BY si.product_id
           ORDER BY totalMinor DESC LIMIT ?`,
       )
