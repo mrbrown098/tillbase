@@ -1,19 +1,48 @@
+<div align="center">
+
 # Tillbase
 
-**A free, open-source business suite for shops, restaurants and fast-food outlets. Not just a till.**
+**The free, open-source business suite for shops, restaurants and fast-food outlets.**<br>
+Sell. Cook. Stock. Pay staff. Know if you are making money.<br>
+No subscription. No per-user fees. No internet needed.
 
-Sell, take orders, run the kitchen, track stock and recipes, record purchases and costs, pay your staff, and see in one screen whether the business is making money and where it is going. It runs on your own computer, works without the internet, and costs nothing. No subscription, no per-user or per-branch fees.
+[![CI](https://github.com/mrbrown098/tillbase/actions/workflows/ci.yml/badge.svg)](https://github.com/mrbrown098/tillbase/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/mrbrown098/tillbase?include_prereleases&label=release)](https://github.com/mrbrown098/tillbase/releases)
+![Platforms](https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-blue)
+![Offline first](https://img.shields.io/badge/works-offline-orange)
 
-> **Status: early development (v0.4).** Everything listed under "What it does" is built and tested. Installers are built on every release; an Urdu interface and multi-branch are still to come (see [Roadmap](#roadmap)). **Tillbase is not yet approved for FBR, PRA or SRB tax-authority integration.** Do not rely on it for tax filing until that exists.
+[**Download**](https://github.com/mrbrown098/tillbase/releases) &nbsp;·&nbsp; [Why Tillbase](#why-tillbase) &nbsp;·&nbsp; [What it does](#what-it-does) &nbsp;·&nbsp; [Compare](docs/COMPARISON.md) &nbsp;·&nbsp; [Roadmap](#roadmap) &nbsp;·&nbsp; [Support the project](#support-the-project)
+
+<img src="docs/screenshots/money.png" alt="Tillbase Money screen: profit, where every rupee of sales went, running costs and wages" width="88%">
+
+</div>
+
+> **Status: early development (v0.4).** Everything listed under "What it does" is built and tested. **Tillbase is not yet approved for FBR, PRA or SRB tax-authority integration.** Do not rely on it for tax filing until that exists.
 
 ## Why Tillbase
 
-- **A business suite, not only a POS.** Most free tills stop at "ring up a sale". Tillbase also answers the owner's real questions: *what does each dish cost me, what did I spend, what did I pay my staff, am I making a profit, and where is the money going?*
-- **For every kind of business.** A grocery, a clothes shop, a pharmacy, a cafe or a fast-food restaurant all use the same engine. Retail shops use the checkout and stock; food businesses add recipes, orders and the kitchen.
-- **Free forever.** MIT licensed. No subscription, no setup fee, no limit on terminals or staff. The only money-making idea in the project is a few short, clearly labelled sponsor banners on non-critical screens (planned): never at checkout, payment or login, with no tracking and no third-party scripts.
-- **Your data stays with you.** One local SQLite file on your own computer, with automatic daily backups. It keeps working when the internet drops.
-- **Numbers you can trust.** Money is stored as whole numbers (paisa/cents), never floating point. Stock is a log of movements, never an overwritten number. A sale is one database transaction, so a crash never leaves half a sale behind. When a figure may be wrong (a dish with no cost, wages not yet run), the screen says so instead of looking confident.
-- **Built to be checked.** Over 200 automated tests, and the screens are driven end to end in a real Electron window.
+Paid POS systems charge every month for a till, a few reports and the right to keep your own data. Tillbase gives a shop the same daily tools, plus the one thing most of them skip: an honest answer to *"am I making money, and where is it going?"*
+
+| | |
+|---|---|
+| **Truly free** | MIT licensed. No subscription, no setup fee, no limit on terminals, staff or items. Nothing is locked behind a paid tier. |
+| **A whole business suite** | Checkout, restaurant orders and kitchen, recipes and real food cost, purchases and suppliers, running costs, wages, profit and loss. |
+| **Any kind of shop** | Grocery, clothes, pharmacy, cafe or fast food: one engine. Retail uses checkout and stock; food adds recipes, orders and the kitchen. |
+| **Your data is yours** | One SQLite file on your own computer with automatic backups. No account, no cloud, no one else reading your sales. |
+| **Works offline** | An internet outage never stops a sale. |
+| **Numbers you can trust** | Money is whole paisa or cents, never decimals that drift. Stock is a log, never an overwritten number. A sale is one database transaction. If a figure may be wrong, the screen says so. |
+| **Built to be checked** | Hundreds of automated tests, and every screen is driven in a real Electron window on Windows, macOS and Linux for each change. |
+
+See an honest side-by-side with other free and paid systems in **[docs/COMPARISON.md](docs/COMPARISON.md)**.
+
+## Download
+
+1. Open the [Releases page](https://github.com/mrbrown098/tillbase/releases) and download the file for your computer: `.exe` (Windows), `.dmg` (macOS), `.AppImage` or `.deb` (Linux).
+2. Each release lists SHA-256 checksums so you can check the download.
+3. The installers are not code-signed yet (signing certificates cost money, see [Support the project](#support-the-project)). Windows shows "unknown publisher": choose **More info, then Run anyway**. On macOS, right-click the app and choose **Open** the first time.
+
+Prefer to build it yourself? See [Quick start](#quick-start).
 
 ## What it does
 
@@ -51,30 +80,6 @@ Sell, take orders, run the kitchen, track stock and recipes, record purchases an
 - **Shifts:** open with a cash float, record cash in and out, count the drawer blind at close, see short, over or exact. Business payments taken from the drawer are counted.
 - **Backups:** a daily copy of your data, and another after each shift closes. The newest 14 are kept next to the database.
 - **Settings:** store name, currency, number format, receipt width and footer.
-
-## Being built right now
-
-Three people work on Tillbase in parallel, each on separate parts of the code so nothing collides.
-
-| Work | What | Status |
-|---|---|---|
-| Customers and loyalty | Customer records on orders, order history, points and wallet, receipts that show them | In progress |
-| Thermal printing | Direct ESC/POS receipt and kitchen-ticket printing, cash drawer kick | Next |
-| First release and screenshots | Version 0.4.0 release, changelog, real screenshots in this README | In progress |
-| Backups and accountant reports | Copy backups to a USB or synced folder, restore from a backup, CSV export of sales, costs and profit | In progress |
-| First-run setup | Currency and country on first start, business mode (retail or restaurant), business-day cutoff, sponsor banner slots | In progress |
-
-Already done and merged: installers for Windows, macOS and Linux (built on every release), automatic tests and an app start-up check on all three systems, delivery fees, split payments and split bills.
-
-## Up next
-
-In rough priority order (details in [docs/ROADMAP.md](docs/ROADMAP.md)):
-
-1. Urdu interface and Urdu on receipts.
-2. Dual tax rates for cash and card; combos and per-item discounts on orders.
-3. Purchase orders, expiry tracking, supplier statements, recurring expenses.
-4. Auto-update and signed installers (removes the "unknown publisher" warning).
-5. Several terminals on one network, then multi-branch with sync.
 
 ## Quick start
 
@@ -127,22 +132,31 @@ Amounts are in minor units and tax rates in basis points: `1800` means 18.00%.
 
 ## Roadmap
 
-- [x] Core engine, desktop app, barcode checkout, receipts
-- [x] Staff logins, roles, shifts and cash drawer reconciliation
-- [x] Ingredients, recipes and real cost of goods; purchases; running costs; wastage
+**Shipped**
+- [x] Checkout, barcode scanning, receipts (58 and 80 mm), split payments
+- [x] Staff PIN logins, roles, shifts, blind cash-up
+- [x] Ingredients, recipes, real food cost; purchases and what you owe; running costs; wastage
 - [x] Attendance and payroll; profit and loss
-- [x] Fast-food orders, add-ons and kitchen board
-- [x] Menu CSV import and export
-- [x] Daily backups
-- [x] Delivery fees, split payments, split bills
-- [x] Installers for Windows, macOS and Linux; CI on all three
-- [ ] Business mode switch, first-run guide, sponsor banners
-- [ ] First-run currency and country; business-day cutoff
-- [ ] Urdu interface and receipts
-- [ ] Off-site backups; accountant reports
-- [ ] Direct thermal printing and cash drawer kick
+- [x] Fast-food orders, add-ons, delivery fees, split bills, kitchen board
+- [x] Menu CSV import and export; daily backups
 - [x] Customers, loyalty points and a wallet
-- [ ] Multi-terminal and multi-branch with sync
+- [x] Installers for Windows, macOS and Linux; tests on all three
+
+**In review now** (open pull requests)
+- [ ] Accountant export (Excel-ready CSV files)
+- [ ] Second-place backups and restore
+
+**Next**
+- [ ] First-run setup: country and currency, business mode, business-day cutoff
+- [ ] Customer credit (khata): sell on account, record repayments
+- [ ] Direct thermal printing and cash drawer; shift Z-report
+- [ ] Supplier purchase orders
+- [ ] Urdu interface and receipts
+- [ ] Sponsor banners (clean, local, no tracking)
+- [ ] Signed installers and auto-update
+- [ ] Several terminals on one network, then multi-branch sync
+
+Full detail in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Project layout
 
@@ -177,6 +191,16 @@ Tillbase is built to be worked on by several people at once, so the rules are wr
 
 Be honest in code and in the UI: do not claim tax-authority approval, and do not hide a number that might be wrong.
 
+## Support the project
+
+Tillbase has no company behind it and no investors. It runs on volunteer time and free tools. If it helps your shop, you can help it stay free:
+
+- **Sponsor or donate:** see the *Sponsor* button at the top of this repository.
+- **Sponsor a banner:** a small clearly labelled banner can run on a few non-critical screens (never checkout, payment or login). No tracking, no scripts, no adult, gambling or alcohol ads. Rules and how to apply will be in `ads/README.md` once banners ship (planned, **not in the app yet**).
+- **Contribute:** code, translations (Urdu first), testing in a real shop, or bug reports all count.
+
+Money raised goes first to a code-signing certificate (removes the "unknown publisher" warning), then a website and download hosting.
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Free for personal and commercial use.
