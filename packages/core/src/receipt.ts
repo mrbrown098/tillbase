@@ -105,9 +105,9 @@ export function formatStatement(st: Statement, opts: ReceiptOptions & { printedA
       : r.kind === "writeoff" ? "Written off"
       : `Sale voided ${r.receiptNo ?? ""}`.trim();
     const amount = signed(r.deltaMinor);
-    const left = `${shortDate(r.at)} ${label}`;
-    out.push(row(left.slice(0, Math.max(1, width - amount.length - 1)), amount, width));
-    out.push(row("", `owes ${money(r.balanceMinor)}`, width));
+    // Two lines per entry so nothing important is cut off on narrow paper: what happened, then the money.
+    out.push(`${shortDate(r.at)} ${label}`.slice(0, width));
+    out.push(row("", `${amount}   owes ${money(r.balanceMinor)}`, width));
   }
   out.push(line);
   out.push(row("OWES NOW", money(st.owedMinor), width));
