@@ -4,6 +4,9 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ## [Unreleased]
 
+### Added
+- A "Fresh clone" check in CI that does what a new contributor does on a new machine (clean checkout, newest npm, `npm ci`, build, launch the app) on Linux, Windows and macOS with Node 22 and 24. It fails if Electron's program was not downloaded, and a separate check on every pull request fails if `package-lock.json` fetches anything over git.
+
 ### Fixed
 - Installing from source with npm 11.2x and newer no longer leaves Electron without its program file ("Electron failed to install correctly"): the packages that need their install step (Electron, esbuild, SQLite) are now approved in `package.json`.
 - Installing from source with a recent npm (11 and newer) no longer fails with `EALLOWGIT`: a build tool that was fetched over git/SSH is now taken from the normal npm registry.
