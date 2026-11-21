@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { taxFor } from "@tillbase/core/money";
-import type { Modifier, Order, OrderType, PaymentInput } from "@tillbase/core";
+import type { Customer, LoyaltyConfig, Modifier, Order, OrderType, PaymentInput } from "@tillbase/core";
 import type { ProductWithStock } from "../../shared/api";
 import { api } from "./api";
-import { PayModal } from "./Checkout";
+import { CustomerBar, PayModal } from "./Checkout";
 import { useApp } from "./context";
+import { CustomerPicker } from "./CustomerPicker";
+import { pointsEarned, type BillLine } from "./loyalty";
 import { minorToInput, parseMoney } from "./format";
 import { Modal, ReceiptView } from "./Modal";
 
@@ -24,6 +26,8 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
   const [paying, setPaying] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [splitting, setSplitting] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [config, setConfig] = useState<LoyaltyConfig | null>(null);
   const [ticket, setTicket] = useState<string | null>(null);
   const [done, setDone] = useState<{ receipt: string; change: number; no: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -48,6 +52,7 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
     void reload();
     api.listProducts().then(setProducts).catch((e: Error) => toast(e.message, "error"));
     api.modifiers().then(setMods).catch(() => undefined);
+    api.getLoyalty().then(setConfig).catch(() => undefined);
   }, [reload, toast]);
 
   const active = orders.find((o) => o.id === activeId) ?? null;
@@ -68,6 +73,11 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
     const fee = active?.type === "delivery" ? active.deliveryFeeMinor : 0;
     return { sub, tax, fee, total: sub + tax + fee };
   }, [active, taxOf]);
+
+  const billLines = useMemo<BillLine[]>(
+    () => (active?.items ?? []).map((i) => ({ netMinor: i.lineMinor, taxRateBp: taxOf.get(i.productId) ?? 0 })),
+    [active, taxOf],
+  );
 
   const run = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
     try {
@@ -103,9 +113,9 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
     );
   };
 
-  const finish = async (payments: PaymentInput[]) => {
+  const finish = async (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number }) => {
     if (!active) return;
-    const r = await run(() => api.payOrder(active.id, payments));
+    const r = await run(() => api.payOrder(active.id, payments, active.customerId ? loyalty : undefined));
     if (!r) return;
     setPaying(false);
     setDone({ receipt: r.receipt, change: r.sale.changeMinor, no: r.sale.receiptNo });
@@ -176,6 +186,12 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
                   Details
                 </button>
               </div>
+              <CustomerBar
+                customer={active.customer}
+                earnHint={active.customer && config ? pointsEarned(totals.sub, config.spendPerPointMinor) : 0}
+                onChoose={() => setChoosing(true)}
+                onClear={() => void run(() => api.updateOrder(active.id, { customerId: null })).then((o) => o && reload(o.id))}
+              />
               {(active.customerName || active.customerPhone || active.deliveryAddress || active.note) && (
                 <p className="muted small">
                   {[active.customerName, active.customerPhone, active.deliveryAddress, active.note && `Note: ${active.note}`].filter(Boolean).join(" · ")}
@@ -282,7 +298,25 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
           }}
         />
       )}
-      {paying && active && <PayModal total={totals.total} onClose={() => setPaying(false)} onConfirm={finish} />}
+      {choosing && active && (
+        <CustomerPicker
+          onClose={() => setChoosing(false)}
+          onPick={(c) => {
+            setChoosing(false);
+            void run(() => api.updateOrder(active.id, { customerId: c.id })).then((o) => o && reload(o.id));
+          }}
+        />
+      )}
+      {paying && active && (
+        <PayModal
+          lines={billLines}
+          extraMinor={totals.fee}
+          customer={active.customer}
+          config={config}
+          onClose={() => setPaying(false)}
+          onConfirm={finish}
+        />
+      )}
       {cancelling && active && (
         <CancelModal
           order={active}
@@ -327,7 +361,7 @@ function OrderDetails({
   title: string;
   order?: Order;
   onClose: () => void;
-  onSave: (v: { type: OrderType; tableLabel: string; customerName: string; customerPhone: string; deliveryAddress: string; deliveryFeeMinor: number; note: string }) => Promise<void>;
+  onSave: (v: { type: OrderType; tableLabel: string; customerName: string; customerPhone: string; deliveryAddress: string; deliveryFeeMinor: number; note: string; customerId: string | null }) => Promise<void>;
 }) {
   const [type, setType] = useState<OrderType>(order?.type ?? "takeaway");
   const [tableLabel, setTable] = useState(order?.tableLabel ?? "");
@@ -337,6 +371,15 @@ function OrderDetails({
   const [fee, setFee] = useState(order && order.deliveryFeeMinor > 0 ? minorToInput(order.deliveryFeeMinor) : "");
   const [note, setNote] = useState(order?.note ?? "");
   const [error, setError] = useState("");
+  const [customerId, setCustomerId] = useState<string | null>(order?.customerId ?? null);
+  const [picking, setPicking] = useState(false);
+  const usePicked = (c: Customer) => {
+    setCustomerId(c.id);
+    setName(c.name);
+    setPhone(c.phone ?? "");
+    if (c.address) setAddress(c.address);
+    setPicking(false);
+  };
   const save = async () => {
     if (type === "delivery" && (!deliveryAddress.trim() || !customerPhone.trim())) {
       return setError("Delivery needs a phone number and an address");
@@ -345,11 +388,12 @@ function OrderDetails({
     const deliveryFeeMinor = type === "delivery" && fee.trim() !== "" ? parseMoney(fee) : 0;
     if (deliveryFeeMinor === null) return setError("Delivery charge must be an amount like 150 or 150.50");
     try {
-      await onSave({ type, tableLabel, customerName, customerPhone, deliveryAddress, deliveryFeeMinor, note });
+      await onSave({ type, tableLabel, customerName, customerPhone, deliveryAddress, deliveryFeeMinor, note, customerId });
     } catch (e) {
       setError((e as Error).message);
     }
   };
+  if (picking) return <CustomerPicker onClose={() => setPicking(false)} onPick={usePicked} />;
   return (
     <Modal title={title} onClose={onClose}>
       <div className="methods" role="group" aria-label="Order type">
@@ -362,6 +406,16 @@ function OrderDetails({
       {type === "dine_in" && (
         <label className="field">Table<input autoFocus value={tableLabel} onChange={(e) => setTable(e.target.value)} placeholder="e.g. 5" /></label>
       )}
+      <div className="customer-field">
+        {customerId ? (
+          <>
+            <span>Saved customer attached</span>
+            <button className="btn btn-ghost" onClick={() => setCustomerId(null)}>Detach</button>
+          </>
+        ) : (
+          <button className="btn" onClick={() => setPicking(true)}>Find a customer by phone</button>
+        )}
+      </div>
       {type !== "dine_in" && (
         <label className="field">Customer name (optional)<input value={customerName} onChange={(e) => setName(e.target.value)} /></label>
       )}
