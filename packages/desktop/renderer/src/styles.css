@@ -854,3 +854,29 @@ tr.inactive td {
 .cart-line-bottom {
   gap: 6px;
 }
+
+/* ---- Customers and loyalty ---- */
+.customer-add { width: 100%; margin-bottom: 8px; }
+.customer-chip { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius); }
+.customer-chip > div { display: grid; }
+.customer-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.customer-results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; max-height: min(360px, 50vh); overflow: auto; }
+.customer-result { width: 100%; display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: inherit; font: inherit; cursor: pointer; }
+.customer-result:hover, .customer-result.on { border-color: var(--accent); background: var(--accent-soft); }
+.customer-name { font-weight: 600; }
+.customer-points { font-weight: 600; color: var(--accent); white-space: nowrap; }
+.loyalty-box { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; display: grid; gap: 8px; background: var(--accent-soft); }
+.loyalty-box p { margin: 0; }
+.loyalty-row { display: flex; align-items: end; gap: 8px; }
+.loyalty-row .field { flex: 1; margin: 0; }
+.customers-grid { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
+.customers-detail { display: grid; gap: 16px; min-width: 0; }
+.customer-title { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.customer-title h2, .customer-title p { margin: 0 0 4px; }
+.customer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.stat-small { font-size: 1rem; }
+.cell-items { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-void { color: var(--muted); text-decoration: line-through; }
+.row-void .badge { text-decoration: none; }
+.page-actions { display: flex; gap: 8px; }
+@media (max-width: 900px) { .customers-grid { grid-template-columns: 1fr; } }

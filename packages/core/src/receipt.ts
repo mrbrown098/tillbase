@@ -55,9 +55,21 @@ export function formatReceipt(sale: Sale, opts: ReceiptOptions): string {
   if (sale.taxMinor > 0) out.push(row("Tax", money(sale.taxMinor), width));
   out.push(row("TOTAL", money(sale.totalMinor), width));
   for (const p of sale.payments) {
-    out.push(row(p.method.toUpperCase(), money(p.amountMinor), width));
+    out.push(row((p.label ?? p.method).toUpperCase(), money(p.amountMinor), width));
   }
   if (sale.changeMinor > 0) out.push(row("Change", money(sale.changeMinor), width));
+  if (sale.customer) {
+    const c = sale.customer;
+    const pts = (n: number) => `${n} point${n === 1 ? "" : "s"}`;
+    out.push(line);
+    out.push(`Customer: ${c.name}`.slice(0, width));
+    if (sale.pointsRedeemed > 0) out.push(row("Points used", `-${sale.pointsRedeemed}`, width));
+    if (sale.pointsEarned > 0) out.push(row("Points earned", `+${sale.pointsEarned}`, width));
+    out.push(row("Points balance", pts(c.points), width));
+    if (sale.payments.some((p) => p.label === "wallet") || c.walletMinor > 0) {
+      out.push(row("Wallet balance", money(c.walletMinor), width));
+    }
+  }
   out.push(line);
   out.push(opts.footer ?? "Thank you!");
   return out.join("\n");

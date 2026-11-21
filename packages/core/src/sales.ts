@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "./db.js";
+import { allocateDiscount } from "./discount.js";
+import { loyaltyConfig, pointsFor, postLedger, reverseSaleLedger } from "./customers.js";
 import { taxFor } from "./money.js";
 
 export type PaymentMethod = "cash" | "card" | "other";
@@ -27,6 +29,12 @@ export interface CheckoutInput {
   /** The open shift this sale belongs to, and who rang it up. */
   shiftId?: string;
   userId?: string;
+  /** The customer this sale is for. Needed to earn or use points, or to pay from a wallet. */
+  customerId?: string | null;
+  /** Loyalty points to use as a discount on the items (not on a delivery charge). */
+  redeemPoints?: number;
+  /** Money to take from the customer's wallet (minor units). It counts as a payment. */
+  walletMinor?: number;
 }
 
 export interface SaleItem {
@@ -47,6 +55,8 @@ export interface Payment {
   id: string;
   method: PaymentMethod;
   amountMinor: number;
+  /** Names an "other" payment, e.g. "wallet". */
+  label: string | null;
 }
 
 export interface Sale {
@@ -69,6 +79,11 @@ export interface Sale {
   voidedAt: string | null;
   items: SaleItem[];
   payments: Payment[];
+  customerId: string | null;
+  /** The customer's name and balances after this sale (current, not as at the sale). */
+  customer: { id: string; name: string; phone: string | null; points: number; walletMinor: number } | null;
+  pointsEarned: number;
+  pointsRedeemed: number;
 }
 
 interface ProductRow {
@@ -81,6 +96,7 @@ interface ProductRow {
   track_stock: number;
   avg_cost: number;
   active: number;
+  is_system: number;
 }
 
 /** One stock item used up by a sale line: the product itself, or an ingredient of its recipe. */
@@ -109,7 +125,6 @@ export class SaleService {
    */
   checkout(input: CheckoutInput): Sale {
     if (input.lines.length === 0) throw new Error("The cart is empty");
-    if (input.payments.length === 0) throw new Error("A payment is required");
 
     const run = this.db.transaction((): string => {
       const now = new Date().toISOString();
@@ -120,7 +135,7 @@ export class SaleService {
       let tax = 0;
 
       const getProduct = this.db.prepare(
-        `SELECT id, name, kind, unit, price_minor, tax_rate_bp, track_stock, avg_cost, active
+        `SELECT id, name, kind, unit, price_minor, tax_rate_bp, track_stock, avg_cost, active, is_system
            FROM products WHERE id = ?`,
       );
       const getRecipe = this.db.prepare(
@@ -158,8 +173,6 @@ export class SaleService {
         if (lineDiscount > gross) {
           throw new Error(`Discount is larger than the line total for ${p.name}`);
         }
-        const net = gross - lineDiscount;
-        const lineTax = taxFor(net, p.tax_rate_bp);
 
         const recipe = getRecipe.all(p.id) as {
           id: string;
@@ -197,10 +210,46 @@ export class SaleService {
         }
         const cogs = uses.reduce((sum, u) => sum + Math.round(u.qty * u.avgCost), 0);
 
-        subtotal += gross;
-        discount += lineDiscount;
-        tax += lineTax;
-        return { p, qty: line.qty, unit, lineDiscount, lineTax, total: net + lineTax, uses, cogs };
+        return { p, qty: line.qty, unit, gross, lineDiscount, lineTax: 0, total: 0, uses, cogs };
+      });
+
+      // Customer, points and wallet. The points discount comes off the food lines only, shared out in
+      // proportion to what each line costs, before tax is worked out, so tax stays correct per line.
+      const customerId = input.customerId ?? null;
+      const redeem = input.redeemPoints ?? 0;
+      const walletWanted = input.walletMinor ?? 0;
+      if (!Number.isInteger(walletWanted) || walletWanted < 0) throw new Error("The wallet amount must be a whole number of 0 or more");
+      if (!Number.isInteger(redeem) || redeem < 0) throw new Error("Points to use must be a whole number of 0 or more");
+      let cust: { id: string; name: string; points: number; wallet: number } | undefined;
+      if (customerId) {
+        cust = this.db.prepare("SELECT id, name, points, wallet_minor AS wallet FROM customers WHERE id = ?").get(customerId) as typeof cust;
+        if (!cust) throw new Error("Customer not found");
+      } else if (redeem > 0 || walletWanted > 0) {
+        throw new Error("Choose a customer to use points or a wallet");
+      }
+      const cfg = loyaltyConfig(this.db);
+      const eligible = priced.map((x) => (x.p.is_system === 1 ? 0 : x.gross - x.lineDiscount));
+      const eligibleTotal = eligible.reduce((a, b) => a + b, 0);
+      let loyaltyDiscount = 0;
+      if (redeem > 0) {
+        if (cfg.pointValueMinor <= 0) throw new Error("Points cannot be used as a discount right now");
+        if (redeem > cust!.points) throw new Error(`${cust!.name} has ${cust!.points} point${cust!.points === 1 ? "" : "s"}, not ${redeem}`);
+        loyaltyDiscount = redeem * cfg.pointValueMinor;
+        if (loyaltyDiscount > eligibleTotal) {
+          throw new Error(`Points can only pay for the items on the bill. The most that can be used here is ${Math.floor(eligibleTotal / cfg.pointValueMinor)}`);
+        }
+      }
+      const shares = allocateDiscount(eligible, loyaltyDiscount);
+      let eligibleNetAfter = 0;
+      priced.forEach((x, i) => {
+        x.lineDiscount += shares[i]!;
+        const net = x.gross - x.lineDiscount;
+        x.lineTax = taxFor(net, x.p.tax_rate_bp);
+        x.total = net + x.lineTax;
+        if (x.p.is_system !== 1) eligibleNetAfter += net;
+        subtotal += x.gross;
+        discount += x.lineDiscount;
+        tax += x.lineTax;
       });
 
       if (!input.allowNegativeStock) {
@@ -216,17 +265,30 @@ export class SaleService {
 
       const total = subtotal - discount + tax;
 
+      if (walletWanted > 0) {
+        if (walletWanted > cust!.wallet) {
+          throw new Error(`${cust!.name}'s wallet has ${cust!.wallet} (minor units), not ${walletWanted}`);
+        }
+        if (walletWanted > total) throw new Error("The wallet amount is more than the bill");
+      }
+      const allPayments: { method: PaymentMethod; amountMinor: number; label: string | null }[] = [
+        ...input.payments.map((x) => ({ ...x, label: null })),
+        ...(walletWanted > 0 ? [{ method: "other" as const, amountMinor: walletWanted, label: "wallet" }] : []),
+      ];
+      if (allPayments.length === 0 && total > 0) throw new Error("A payment is required");
+      const earned = cust ? pointsFor(eligibleNetAfter, cfg) : 0;
+
       for (const pay of input.payments) {
         if (!Number.isInteger(pay.amountMinor) || pay.amountMinor <= 0) {
           throw new Error("Payment amounts must be positive integers");
         }
       }
-      const paid = input.payments.reduce((s, x) => s + x.amountMinor, 0);
+      const paid = allPayments.reduce((s, x) => s + x.amountMinor, 0);
       if (paid < total) {
         throw new Error(`Payment is short by ${total - paid} (minor units)`);
       }
       const change = paid - total;
-      const cashPaid = input.payments
+      const cashPaid = allPayments
         .filter((x) => x.method === "cash")
         .reduce((s, x) => s + x.amountMinor, 0);
       if (change > cashPaid) {
@@ -238,8 +300,8 @@ export class SaleService {
         .prepare(
           `INSERT INTO sales (id, receipt_no, status, subtotal_minor, discount_minor,
              tax_minor, total_minor, paid_minor, change_minor, cashier, created_at,
-             shift_id, user_id)
-           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             shift_id, user_id, customer_id, points_earned, points_redeemed)
+           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           saleId,
@@ -254,6 +316,9 @@ export class SaleService {
           now,
           input.shiftId ?? null,
           input.userId ?? null,
+          customerId,
+          earned,
+          redeem,
         );
 
       const insItem = this.db.prepare(
@@ -288,10 +353,20 @@ export class SaleService {
       }
 
       const insPay = this.db.prepare(
-        "INSERT INTO payments (id, sale_id, method, amount_minor) VALUES (?, ?, ?, ?)",
+        "INSERT INTO payments (id, sale_id, method, amount_minor, label) VALUES (?, ?, ?, ?, ?)",
       );
-      for (const pay of input.payments) {
-        insPay.run(randomUUID(), saleId, pay.method, pay.amountMinor);
+      for (const pay of allPayments) {
+        insPay.run(randomUUID(), saleId, pay.method, pay.amountMinor, pay.label);
+      }
+
+      // The customer's ledger: points used, wallet spent, points earned.
+      if (cust) {
+        const post = (account: "points" | "wallet", delta: number, reason: "earn" | "redeem" | "spend") => {
+          if (delta !== 0) postLedger(this.db, { customerId: cust!.id, account, delta, reason, saleId, userId: input.userId });
+        };
+        post("points", -redeem, "redeem");
+        post("wallet", -walletWanted, "spend");
+        post("points", earned, "earn");
       }
       return saleId;
     });
@@ -319,6 +394,8 @@ export class SaleService {
           "UPDATE sales SET status='void', void_reason=?, voided_at=? WHERE id=?",
         )
         .run(reason.trim(), now, saleId);
+      // Give back points and wallet money the sale used, and take back the points it earned.
+      reverseSaleLedger(this.db, saleId);
 
       const original = this.db
         .prepare(
@@ -371,6 +448,7 @@ export class SaleService {
         id: r.id as string,
         method: r.method as PaymentMethod,
         amountMinor: r.amount_minor as number,
+        label: (r.label as string | null) ?? null,
       }),
     );
 
@@ -401,6 +479,15 @@ export class SaleService {
       voidedAt: (s.voided_at as string | null) ?? null,
       items,
       payments,
+      customerId: (s.customer_id as string | null) ?? null,
+      customer:
+        ((s.customer_id
+          ? this.db
+              .prepare("SELECT id, name, phone, points, wallet_minor AS walletMinor FROM customers WHERE id = ?")
+              .get(s.customer_id)
+          : undefined) as Sale["customer"]) ?? null,
+      pointsEarned: (s.points_earned as number | undefined) ?? 0,
+      pointsRedeemed: (s.points_redeemed as number | undefined) ?? 0,
     };
   }
 

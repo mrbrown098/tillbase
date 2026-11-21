@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { taxFor } from "@tillbase/core/money";
-import type { PaymentInput, PaymentMethod } from "@tillbase/core";
+import type { Customer, LoyaltyConfig, PaymentInput, PaymentMethod } from "@tillbase/core";
 import type { ProductWithStock } from "../../shared/api";
 import { api } from "./api";
 import { useApp } from "./context";
+import { CustomerPicker } from "./CustomerPicker";
+import { maxPoints, planPayment, pointsEarned, type BillLine } from "./loyalty";
 import { minorToInput, parseMoney } from "./format";
 import { Modal, ReceiptView } from "./Modal";
 import { methodLabel, summarizePayments } from "./payments";
@@ -28,6 +30,9 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
   const [results, setResults] = useState<ProductWithStock[]>([]);
   const [cart, setCart] = useState<Line[]>([]);
   const [paying, setPaying] = useState(false);
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const [config, setConfig] = useState<LoyaltyConfig | null>(null);
   const [done, setDone] = useState<{ receipt: string; change: number; no: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -47,6 +52,15 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
       clearTimeout(t);
     };
   }, [query, toast, done]);
+
+  useEffect(() => {
+    api.getLoyalty().then(setConfig).catch(() => undefined);
+  }, []);
+
+  const billLines = useMemo<BillLine[]>(
+    () => cart.map((l) => ({ netMinor: lineTotals(l).net, taxRateBp: l.product.taxRateBp })),
+    [cart],
+  );
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -129,7 +143,7 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
     );
   };
 
-  const finish = async (payments: PaymentInput[]) => {
+  const finish = async (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number }) => {
     try {
       const { sale, receipt } = await api.checkout({
         lines: cart.map((l) => ({
@@ -138,8 +152,10 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
           discountMinor: l.discountMinor,
         })),
         payments,
+        ...(customer ? { customerId: customer.id, redeemPoints: loyalty.redeemPoints, walletMinor: loyalty.walletMinor } : {}),
       });
       setCart([]);
+      setCustomer(null);
       setPaying(false);
       setQuery("");
       setDone({ receipt, change: sale.changeMinor, no: sale.receiptNo });
@@ -202,6 +218,12 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
 
       <aside className="cart" aria-label="Current sale">
         <h2>Current sale</h2>
+        <CustomerBar
+          customer={customer}
+          earnHint={customer && config ? pointsEarned(totals.subtotal - totals.discount, config.spendPerPointMinor) : 0}
+          onChoose={() => setChoosing(true)}
+          onClear={() => setCustomer(null)}
+        />
         <div className="cart-lines">
           {cart.length === 0 && <p className="empty">Scan or tap a product to begin.</p>}
           {cart.map((l) => {
@@ -300,9 +322,26 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
         </div>
       </aside>
 
+      {choosing && (
+        <CustomerPicker
+          onClose={() => {
+            setChoosing(false);
+            refocus();
+          }}
+          onPick={(c) => {
+            setCustomer(c);
+            setChoosing(false);
+            refocus();
+          }}
+        />
+      )}
+
       {paying && (
         <PayModal
-          total={totals.total}
+          lines={billLines}
+          extraMinor={0}
+          customer={customer}
+          config={config}
           onClose={() => {
             setPaying(false);
             refocus();
@@ -352,12 +391,17 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
  * (the amount is already filled in, and Enter completes). "Split payment" opens the longer view,
  * where cash, card and other can be added one by one until nothing remains.
  */
-export function PayModal({
+function PayInner({
   total,
+  header,
+  blocked,
   onClose,
   onConfirm,
 }: {
   total: number;
+  header: ReactNode;
+  /** True while something above (such as the points entered) is wrong, so the sale cannot be completed. */
+  blocked: boolean;
   onClose: () => void;
   onConfirm: (payments: PaymentInput[]) => Promise<void>;
 }) {
@@ -367,6 +411,17 @@ export function PayModal({
   const [text, setText] = useState(minorToInput(total));
   const [added, setAdded] = useState<PaymentInput[]>([]);
   const [busy, setBusy] = useState(false);
+
+  // Using points or the wallet changes what is left to pay: start the amounts again from the new figure.
+  const lastTotal = useRef(total);
+  useEffect(() => {
+    if (lastTotal.current === total) return;
+    lastTotal.current = total;
+    setText(minorToInput(total));
+    setAdded([]);
+    setSplit(false);
+    setMethod("cash");
+  }, [total]);
 
   // ---- one payment ----
   const tendered = method === "cash" ? parseMoney(text) : total;
@@ -397,8 +452,13 @@ export function PayModal({
   };
 
   const submit = async () => {
+    if (blocked) return;
     if (split) {
       if (summary.ok) await send(added);
+      return;
+    }
+    if (total === 0) {
+      await send([]);
       return;
     }
     if (!valid || tendered === null) return;
@@ -451,6 +511,7 @@ export function PayModal({
   if (split) {
     return (
       <Modal title={`Split payment · ${money(total)}`} onClose={onClose}>
+        {header}
         <dl className="split-summary">
           <div>
             <dt>Total</dt>
@@ -521,7 +582,7 @@ export function PayModal({
           <button className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn-primary btn-lg" disabled={!summary.ok || busy} onClick={() => void submit()}>
+          <button className="btn btn-primary btn-lg" disabled={!summary.ok || busy || blocked} onClick={() => void submit()}>
             Complete sale
           </button>
         </div>
@@ -531,9 +592,14 @@ export function PayModal({
 
   return (
     <Modal title={`Take payment · ${money(total)}`} onClose={onClose}>
-      {methodButtons}
+      {header}
+      {total === 0 ? (
+        <p className="pay-status">Nothing left to pay. Points and wallet cover the whole bill.</p>
+      ) : (
+        methodButtons
+      )}
 
-      {method === "cash" ? (
+      {total === 0 ? null : method === "cash" ? (
         <>
           <label className="field">
             Amount received
@@ -574,13 +640,160 @@ export function PayModal({
         <button className="btn" onClick={onClose}>
           Cancel
         </button>
-        <button className="btn" onClick={startSplit}>
-          Split payment
-        </button>
-        <button className="btn btn-primary btn-lg" disabled={!valid || busy} onClick={() => void submit()}>
-          {method === "cash" ? "Complete sale" : method === "card" ? "Card approved — complete sale" : "Complete sale"}
+        {total > 0 && (
+          <button className="btn" onClick={startSplit}>
+            Split payment
+          </button>
+        )}
+        <button className="btn btn-primary btn-lg" disabled={(total > 0 && !valid) || busy || blocked} onClick={() => void submit()}>
+          {total === 0 || method === "cash" ? "Complete sale" : method === "card" ? "Card approved — complete sale" : "Complete sale"}
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** The customer on the current sale: who they are, what they have, and what this sale will earn. */
+export function CustomerBar({
+  customer,
+  earnHint,
+  onChoose,
+  onClear,
+}: {
+  customer: Customer | { name: string; phone: string | null; points: number; walletMinor: number } | null;
+  earnHint: number;
+  onChoose: () => void;
+  onClear: () => void;
+}) {
+  const { money } = useApp();
+  if (!customer) {
+    return (
+      <button className="btn customer-add" onClick={onChoose}>
+        + Add customer
+      </button>
+    );
+  }
+  return (
+    <div className="customer-chip" aria-label="Customer on this sale">
+      <div>
+        <strong>{customer.name}</strong>
+        <span className="muted small">
+          {customer.points} point{customer.points === 1 ? "" : "s"}
+          {customer.walletMinor > 0 ? ` · wallet ${money(customer.walletMinor)}` : ""}
+          {earnHint > 0 ? ` · earns ${earnHint}` : ""}
+        </span>
+      </div>
+      <button className="btn btn-ghost" aria-label={`Remove customer ${customer.name}`} onClick={onClear}>
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Take payment for a bill. If a customer is on the sale, they can use points as a discount and
+ * spend their wallet first; the person then pays only what is left.
+ */
+export function PayModal({
+  lines,
+  extraMinor,
+  customer,
+  config,
+  onClose,
+  onConfirm,
+}: {
+  lines: BillLine[];
+  /** Untaxed charges that points cannot reduce, such as a delivery fee. */
+  extraMinor: number;
+  customer: Customer | { name: string; points: number; walletMinor: number } | null;
+  config: LoyaltyConfig | null;
+  onClose: () => void;
+  onConfirm: (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number }) => Promise<void>;
+}) {
+  const { money } = useApp();
+  const value = config?.pointValueMinor ?? 0;
+  const items = lines.reduce((s, l) => s + l.netMinor, 0);
+  const most = customer ? maxPoints(customer.points, items, value) : 0;
+  const [pointsText, setPointsText] = useState("");
+  const [useWallet, setUseWallet] = useState(false);
+
+  const typed = pointsText.trim() === "" ? 0 : Number(pointsText);
+  const pointsValid = Number.isInteger(typed) && typed >= 0 && typed <= most;
+  const redeem = pointsValid ? typed : 0;
+  const plan = planPayment({
+    lines,
+    extraMinor,
+    redeemPoints: redeem,
+    pointValueMinor: value,
+    useWallet,
+    walletBalanceMinor: customer?.walletMinor ?? 0,
+  });
+
+  const pointsProblem = pointsValid
+    ? null
+    : !Number.isInteger(typed) || typed < 0
+      ? "Enter a whole number of points"
+      : customer && typed > customer.points
+        ? `${customer.name} only has ${customer.points} point${customer.points === 1 ? "" : "s"}`
+        : `Points can only pay for the items. The most here is ${most}`;
+
+  const showLoyalty = !!customer && (most > 0 || customer.walletMinor > 0);
+  const header = showLoyalty && customer && (
+    <div className="loyalty-box" aria-label="Points and wallet">
+      <p>
+        <strong>{customer.name}</strong>
+        <span className="muted small">
+          {" "}· {customer.points} point{customer.points === 1 ? "" : "s"}
+          {customer.walletMinor > 0 ? ` · wallet ${money(customer.walletMinor)}` : ""}
+        </span>
+      </p>
+      {most > 0 && (
+        <div className="loyalty-row">
+          <label className="field">
+            Points to use (up to {most}, {money(value)} each)
+            <input
+              inputMode="numeric"
+              value={pointsText}
+              placeholder="0"
+              onChange={(e) => setPointsText(e.target.value)}
+              aria-invalid={!pointsValid}
+            />
+          </label>
+          <button className="btn" onClick={() => setPointsText(String(most))}>
+            Use {most}
+          </button>
+        </div>
+      )}
+      {pointsProblem && (
+        <p className="form-error" role="alert">
+          {pointsProblem}
+        </p>
+      )}
+      {customer.walletMinor > 0 && (
+        <label className="check">
+          <input type="checkbox" checked={useWallet} onChange={(e) => setUseWallet(e.target.checked)} />
+          Use wallet ({money(Math.min(customer.walletMinor, plan.payableMinor))} of {money(customer.walletMinor)})
+        </label>
+      )}
+      {(plan.discountMinor > 0 || plan.walletMinor > 0) && (
+        <p className="muted small">
+          {plan.discountMinor > 0 && `Points take ${money(plan.discountMinor)} off. `}
+          {plan.walletMinor > 0 && `Wallet pays ${money(plan.walletMinor)}. `}
+          Bill {money(plan.payableMinor)}, still to pay {money(plan.dueMinor)}.
+        </p>
+      )}
+    </div>
+  );
+
+  return (
+    <PayInner
+      total={plan.dueMinor}
+      header={header}
+      blocked={!pointsValid}
+      onClose={onClose}
+      onConfirm={async (payments) => {
+        await onConfirm(payments, { redeemPoints: redeem, walletMinor: plan.walletMinor });
+      }}
+    />
   );
 }
