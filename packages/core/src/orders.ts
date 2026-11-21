@@ -64,6 +64,9 @@ export interface Order {
   customerName: string | null;
   customerPhone: string | null;
   deliveryAddress: string | null;
+  /** The saved customer attached to this order, if any, with their balances right now. */
+  customerId: string | null;
+  customer: { id: string; name: string; phone: string | null; points: number; walletMinor: number } | null;
   note: string | null;
   status: "open" | "paid" | "cancelled";
   kitchenStatus: KitchenStatus | null;
@@ -86,6 +89,8 @@ export interface OrderInput {
   customerName?: string | null;
   customerPhone?: string | null;
   deliveryAddress?: string | null;
+  /** Attach a saved customer (or null to detach). Their saved name, phone and (for delivery) address fill the order in: on a new order only where nothing was typed, and when attaching to an existing order they replace what was there. */
+  customerId?: string | null;
   /** Delivery orders only: the delivery charge in minor units, a whole number, 0 or more. */
   deliveryFeeMinor?: number;
   note?: string | null;
@@ -110,6 +115,7 @@ interface OrderRow {
   customer_name: string | null;
   customer_phone: string | null;
   delivery_address: string | null;
+  customer_id: string | null;
   note: string | null;
   status: "open" | "paid" | "cancelled";
   kitchen_status: KitchenStatus | null;
@@ -209,6 +215,7 @@ export class OrderService {
     const fee = input.deliveryFeeMinor === undefined ? 0 : checkFee(input.deliveryFeeMinor);
     if (fee > 0 && type !== "delivery") throw new Error("Only delivery orders have a delivery charge");
     const id = randomUUID();
+    const cust = this.customerFor(input.customerId);
     this.db.transaction(() => {
       const date = localDate();
       const token =
@@ -216,15 +223,15 @@ export class OrderService {
       this.db
         .prepare(
           `INSERT INTO orders (id, token_date, token, type, table_label, customer_name, customer_phone,
-             delivery_address, note, user_id, created_at, delivery_fee_minor)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             delivery_address, note, user_id, created_at, delivery_fee_minor, customer_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id, date, token, type,
           type === "dine_in" ? table : null,
-          clean(input.customerName), clean(input.customerPhone),
-          type === "delivery" ? clean(input.deliveryAddress) : null,
-          clean(input.note), input.userId ?? null, new Date().toISOString(), fee,
+          clean(input.customerName) ?? cust?.name ?? null, clean(input.customerPhone) ?? cust?.phone ?? null,
+          type === "delivery" ? clean(input.deliveryAddress) ?? cust?.address ?? null : null,
+          clean(input.note), input.userId ?? null, new Date().toISOString(), fee, cust?.id ?? null,
         );
     })();
     return this.mustGet(id);
@@ -243,19 +250,26 @@ export class OrderService {
     // Changing a delivery order into something else drops its delivery charge, like its address.
     const fee = type === "delivery" ? wantedFee : 0;
     const pick = <T>(p: T | undefined, cur: T) => (p === undefined ? cur : p);
+    // Attaching a customer replaces the order details with theirs (unless the patch sets them); detaching keeps the text.
+    const attaching = patch.customerId !== undefined && patch.customerId !== null && patch.customerId !== o.customerId;
+    const cust = this.customerFor(patch.customerId);
+    const customerId = patch.customerId === undefined ? o.customerId : (cust?.id ?? null);
+    const fill = <T>(p: T | undefined, current: T, fromCustomer: T | undefined) =>
+      p !== undefined ? p : attaching && fromCustomer ? fromCustomer : current;
     this.db
       .prepare(
         `UPDATE orders SET type = ?, table_label = ?, customer_name = ?, customer_phone = ?,
-           delivery_address = ?, note = ?, delivery_fee_minor = ? WHERE id = ?`,
+           delivery_address = ?, note = ?, delivery_fee_minor = ?, customer_id = ? WHERE id = ?`,
       )
       .run(
         type,
         type === "dine_in" ? table : null,
-        clean(pick(patch.customerName, o.customerName)),
-        clean(pick(patch.customerPhone, o.customerPhone)),
-        type === "delivery" ? clean(pick(patch.deliveryAddress, o.deliveryAddress)) : null,
+        clean(fill(patch.customerName, o.customerName, cust?.name)),
+        clean(fill(patch.customerPhone, o.customerPhone, cust?.phone)),
+        type === "delivery" ? clean(fill(patch.deliveryAddress, o.deliveryAddress, cust?.address)) : null,
         clean(pick(patch.note, o.note)),
         fee,
+        customerId,
         orderId,
       );
     return this.mustGet(orderId);
@@ -370,7 +384,11 @@ export class OrderService {
   /** Take payment for an open order. Uses the normal checkout, so stock, cost and profit all follow. */
   pay(
     orderId: string,
-    input: { payments: PaymentInput[]; shiftId?: string; userId?: string; cashier?: string; allowNegativeStock?: boolean },
+    input: {
+      payments: PaymentInput[]; shiftId?: string; userId?: string; cashier?: string; allowNegativeStock?: boolean;
+      /** Points to use as a discount and wallet money to spend, for the customer attached to the order. */
+      redeemPoints?: number; walletMinor?: number;
+    },
   ): Sale {
     return this.db.transaction((): Sale => {
       const o = this.mustOpen(orderId);
@@ -393,6 +411,9 @@ export class OrderService {
         shiftId: input.shiftId,
         userId: input.userId,
         allowNegativeStock: input.allowNegativeStock,
+        customerId: o.customerId,
+        redeemPoints: input.redeemPoints,
+        walletMinor: input.walletMinor,
       });
 
       // Label each sale line with its add-ons, and use up add-on ingredients.
@@ -499,10 +520,10 @@ export class OrderService {
       this.db
         .prepare(
           `INSERT INTO orders (id, token_date, token, type, table_label, customer_name, customer_phone,
-             delivery_address, note, user_id, created_at, split_from)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+             delivery_address, note, user_id, created_at, split_from, customer_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
         )
-        .run(newId, date, token, o.type, o.tableLabel, o.customerName, o.customerPhone, o.deliveryAddress, userId, now, orderId);
+        .run(newId, date, token, o.type, o.tableLabel, o.customerName, o.customerPhone, o.deliveryAddress, userId, now, orderId, o.customerId);
 
       const raw = this.db.prepare("SELECT note, modifiers, sent_at FROM order_items WHERE id = ?");
       for (const { item, qty, whole } of plan) {
@@ -591,6 +612,15 @@ export class OrderService {
     return o;
   }
 
+  private customerFor(id: string | null | undefined): { id: string; name: string; phone: string | null; address: string | null } | undefined {
+    if (!id) return undefined;
+    const c = this.db.prepare("SELECT id, name, phone, address FROM customers WHERE id = ?").get(id) as
+      | { id: string; name: string; phone: string | null; address: string | null }
+      | undefined;
+    if (!c) throw new Error("Customer not found");
+    return c;
+  }
+
   private mustOpen(id: string): Order {
     const o = this.mustGet(id);
     if (o.status !== "open") throw new Error(o.status === "paid" ? "That order has already been paid" : "That order was cancelled");
@@ -625,7 +655,12 @@ export class OrderService {
     });
     return {
       id: r.id, token: r.token, type: r.type, tableLabel: r.table_label, customerName: r.customer_name,
-      customerPhone: r.customer_phone, deliveryAddress: r.delivery_address, note: r.note, status: r.status,
+      customerPhone: r.customer_phone, deliveryAddress: r.delivery_address,
+      customerId: r.customer_id,
+      customer: r.customer_id
+        ? ((this.db.prepare("SELECT id, name, phone, points, wallet_minor AS walletMinor FROM customers WHERE id = ?").get(r.customer_id) as Order["customer"]) ?? null)
+        : null,
+      note: r.note, status: r.status,
       kitchenStatus: r.kitchen_status, createdAt: r.created_at, sentAt: r.sent_at, saleId: r.sale_id,
       cancelReason: r.cancel_reason, deliveryFeeMinor: r.delivery_fee_minor, splitFrom: r.split_from,
       items, subtotalMinor: items.reduce((s, i) => s + i.lineMinor, 0),
