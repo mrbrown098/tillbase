@@ -5,6 +5,7 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 ## [Unreleased]
 
 ### Fixed
+- Installing from source with npm 11.2x and newer no longer leaves Electron without its program file ("Electron failed to install correctly"): the packages that need their install step (Electron, esbuild, SQLite) are now approved in `package.json`.
 - Installing from source with a recent npm (11 and newer) no longer fails with `EALLOWGIT`: a build tool that was fetched over git/SSH is now taken from the normal npm registry.
 
 ## [0.5.0] - 2026-11-21
