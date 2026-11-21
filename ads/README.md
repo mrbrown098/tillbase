@@ -60,7 +60,7 @@ Sponsors must be businesses that help a shop or restaurant run (the categories a
 Also:
 
 - **Every sponsor is a reviewed pull request.** A maintainer checks that the business is real, that it fits the policy, and that the text is honest. The validator is a floor, not the whole review.
-- **Ads are never in the way of selling.** They appear in the footer only, as one line, and never on the payment or receipt screens.
+- **Ads are never in the way of selling.** They appear in the footer only, as one line, and never on the checkout, payment or login screens.
 - **Sponsors get no say in the software.** No feature, default, report or setting is changed for a sponsor, and sponsors never see anything about any shop. Tillbase holds no data about shops.
 - A message can be removed at any time if it breaks the rules or turns out to be misleading.
 - Anyone can report an ad by opening an issue.
@@ -74,7 +74,7 @@ Also:
 
 ## How the money is used
 
-Sponsorship money pays for what the project needs to keep being free: code-signing certificates (so the installers stop showing "unknown publisher" warnings), build and hosting costs, and maintainers' time. The amounts and how they were spent are reported openly in this repository.
+Sponsorship money goes first to a code-signing certificate (it removes the "unknown publisher" warning when people install Tillbase), then to a website and download hosting. Tillbase has no company and no investors. How the money was spent is reported openly in this repository.
 
 ## Checking your change before you open a pull request
 
