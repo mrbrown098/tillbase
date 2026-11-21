@@ -109,6 +109,10 @@ The app is ad-hoc signed (so that it runs on Apple Silicon) but not signed by an
 
 No warning. For the AppImage, mark it executable first (right-click, Properties, "Allow executing as program", or `chmod +x`).
 
+## Publishing to winget, Scoop and Homebrew
+
+Not done yet. The plan, requirements and sketches are in [PACKAGING.md](PACKAGING.md).
+
 ## Adding code signing later
 
 None of this is set up or tested. It is the list of what to do once the project has the money or a sponsor.

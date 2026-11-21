@@ -4,6 +4,9 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ## [Unreleased]
 
+### Added
+- Open-source housekeeping: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue forms for bug reports and feature requests (asking for operating system, Node version and app version), a pull request template, weekly Dependabot updates for npm and GitHub Actions (minor and patch grouped), a CodeQL code-scanning workflow, and `docs/PACKAGING.md` with the plan for winget, Scoop and Homebrew.
+
 ### Fixed
 - Installing from source with npm 11.2x and newer no longer leaves Electron without its program file ("Electron failed to install correctly"): the packages that need their install step (Electron, esbuild, SQLite) are now approved in `package.json`.
 - Installing from source with a recent npm (11 and newer) no longer fails with `EALLOWGIT`: a build tool that was fetched over git/SSH is now taken from the normal npm registry.
