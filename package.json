@@ -1,7 +1,7 @@
 {
   "name": "tillbase",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Free, open source, offline-first POS for retail and restaurants.",
   "license": "MIT",
   "workspaces": [
@@ -14,7 +14,8 @@
     "pretypecheck": "npm run build -w @tillbase/core",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "app": "npm run build -w @tillbase/core && npm run rebuild -w @tillbase/desktop && npm run start -w @tillbase/desktop",
-    "rebuild:node": "npm rebuild better-sqlite3"
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "screenshots": "npm run build -w @tillbase/core && npm run rebuild -w @tillbase/desktop && npm run build -w @tillbase/desktop && node scripts/screenshots.mjs"
   },
   "engines": {
     "node": ">=22"
