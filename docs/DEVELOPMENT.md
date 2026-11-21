@@ -27,6 +27,7 @@ Data flow: a screen calls `api.something()` -> preload -> IPC -> `createHandlers
 9. Prefer plain, kind wording on screens: this is used by shop and restaurant staff, not accountants.
 10. **Hidden system products.** `products.is_system = 1` marks a product the app makes for itself (today only the "Delivery fee" line on a sale). It must never appear in a list, search, barcode lookup, stock or low-stock view, CSV export or import match, or best-sellers, and it must not raise the "item has no cost" warning. Any new query over `products` that people see or match against needs `is_system = 0`; the delivery-fee test in `packages/core/test/orders.test.ts` checks each place, so extend it when you add one.
 11. **Split bills share their table.** Orders made by `splitItems` carry `split_from`; the one-open-order-per-table rule treats orders from the same split chain as one family. Splitting never changes a price or removes an item, and a delivery charge stays on the original bill.
+12. **Customer balances come from a ledger.** `customers.points` and `customers.wallet_minor` are never written by code: database triggers add up `customer_ledger` rows, and the ledger cannot be updated or deleted. Change a balance only with `postLedger` (in `customers.ts`) inside the transaction that needs it, and fix mistakes with a correcting row. A voided sale reverses its own rows (`reverseSaleLedger`). Points discount only the food lines (never a hidden system line such as the delivery fee) and are shared across lines with `allocateDiscount` before tax; the till screen uses the same function from `@tillbase/core/discount`. Wallet money is a `payments` row with method `other` and label `wallet`. Spend totals are for the owner only: `customerHistory` returns `null` unless the user has `customers.view_spend`.
 
 ## Running things
 
@@ -62,6 +63,7 @@ npm run app                # prepare SQLite for Electron, build everything, open
 |---|---|---|
 | Selling | `sales.ts`, `receipt.ts` | `Checkout.tsx`, `Sales.tsx` |
 | Orders, add-ons, kitchen, delivery fee, split bills | `orders.ts` | `Orders.tsx`, `Kitchen.tsx` |
+| Customers, loyalty points, wallet | `customers.ts`, `discount.ts` | `Customers.tsx`, `CustomerPicker.tsx`, `loyalty.ts` |
 | Pay screen (several payments) | `sales.ts` | `Checkout.tsx` (`PayModal`), `payments.ts` |
 | Products, recipes, stock | `products.ts`, `recipes.ts`, `inventory.ts` | `Products.tsx` |
 | Purchases, expenses | `purchases.ts`, `expenses.ts` | `Purchases.tsx`, `Costs.tsx` |
