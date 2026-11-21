@@ -4,6 +4,9 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ## [Unreleased]
 
+### Fixed
+- Installing from source with a recent npm (11 and newer) no longer fails with `EALLOWGIT`: a build tool that was fetched over git/SSH is now taken from the normal npm registry.
+
 ## [0.5.0] - 2026-11-21
 
 ### Added
