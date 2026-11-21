@@ -59,6 +59,8 @@ export type { BreakdownLine, DailyPoint, ItemProfit, ProfitAndLoss } from "./fin
 export { backupDatabase } from "./backup.js";
 export { OrderService, orderTypes, orderTypeLabel, kitchenStatuses } from "./orders.js";
 export type { Modifier, ModifierInput, Order, OrderInput, OrderItem, OrderType, KitchenStatus, KitchenTicket } from "./orders.js";
+export { AccountingExportService, decimal } from "./accounting-export.js";
+export type { AccountingFile } from "./accounting-export.js";
 export { CustomerService, loyaltyConfig, defaultLoyalty, pointsFor, normalizePhone } from "./customers.js";
 export type { Customer, CustomerInput, CustomerSummary, CustomerHistory, CustomerVisit, LedgerEntry, LoyaltyConfig } from "./customers.js";
 export { allocateDiscount, totalsAfterDiscount } from "./discount.js";
