@@ -4,6 +4,8 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-21
+
 ### Added
 - Backups to a second place: the owner can choose a USB drive or a Dropbox or Google Drive folder on the new Backups screen, and every backup is copied there too. A missing folder never stops selling; it shows a plain warning.
 - Restore from a backup (owner only): the backup is checked first, the current data is kept as `tillbase.sqlite.before-restore`, and Tillbase restarts on the restored data.
