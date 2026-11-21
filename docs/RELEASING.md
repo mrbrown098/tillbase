@@ -25,6 +25,18 @@ Where the shop's data lives (it is never inside the install folder, so updating 
 
 Daily backups are kept in a `backups` folder next to the database. There is no automatic updater: to update, install the newer version over the old one. The data is kept.
 
+## Before you tag: changelog and screenshots
+
+1. Add a section for the new version at the top of [CHANGELOG.md](../CHANGELOG.md), written for shop owners, not developers. Only list what is built and tested.
+2. If screens changed, refresh the README pictures. They are real screenshots of a made-up demo shop (`scripts/demo-db.mjs`), taken by driving the real app:
+
+   ```bash
+   npm run screenshots        # builds the app, prepares SQLite for Electron, writes docs/screenshots/*.png
+   npm run rebuild:node       # switch SQLite back before running the unit tests
+   ```
+
+   On Linux without a display the script starts itself under `xvfb-run` (install `xvfb` first). Look at the pictures before you commit them. The script stops with an error instead of saving a screen that did not show what it should.
+
 ## Cutting a release
 
 You need push access to the repository. Do this from an up-to-date `main` with all checks green.
