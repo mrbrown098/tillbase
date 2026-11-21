@@ -9,3 +9,5 @@ coverage/
 *.sqlite-shm
 .DS_Store
 .env
+release/
+smoke-output/

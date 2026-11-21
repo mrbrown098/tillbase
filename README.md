@@ -60,7 +60,7 @@ In rough priority order (details in [docs/ROADMAP.md](docs/ROADMAP.md)):
 
 ## Quick start
 
-Requires **Node.js 20 or newer**. (Ready-made installers are being built; until then, run it from source.)
+Requires **Node.js 22 or newer** (check with `node --version`; Node 20 is end-of-life and the SQLite module no longer ships ready-made binaries for it). (Ready-made installers are being built; until then, run it from source.)
 
 ```bash
 git clone https://github.com/mrbrown098/tillbase.git

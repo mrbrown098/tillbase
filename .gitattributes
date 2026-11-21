@@ -1,0 +1,7 @@
+# Keep line endings as LF in the repository and in Windows checkouts, so scripts, tests and
+# generated files behave the same on every operating system.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
+*.sqlite binary

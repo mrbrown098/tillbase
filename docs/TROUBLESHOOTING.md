@@ -4,7 +4,7 @@
 
 Copy the **first error line** from the terminal and open an issue with it. Common causes:
 
-**1. Wrong Node version.** Tillbase needs Node.js 20 or newer. Check with `node --version`.
+**1. Wrong Node version (the most common cause on Windows).** Tillbase needs **Node.js 22 or newer**. Check with `node --version`. On Node 20 or older, `npm install` cannot download a ready-made SQLite binary, tries to compile it, and fails unless Visual Studio C++ build tools are installed. Install the current LTS from https://nodejs.org, open a new terminal, delete the `node_modules` folder, and run `npm install` again.
 
 **2. The SQLite module could not be prepared for Electron.**
 `npm run app` first downloads a ready-made SQLite binary for your Electron version. If your network blocks

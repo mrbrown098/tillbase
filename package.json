@@ -9,12 +9,17 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "pretest": "npm run build -w @tillbase/core",
     "test": "npm run test --workspaces --if-present",
+    "pretypecheck": "npm run build -w @tillbase/core",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "app": "npm run build -w @tillbase/core && npm run rebuild -w @tillbase/desktop && npm run start -w @tillbase/desktop",
     "rebuild:node": "npm rebuild better-sqlite3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.1"
   }
 }
