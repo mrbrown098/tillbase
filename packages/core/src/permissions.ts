@@ -15,9 +15,13 @@ export type Permission =
   | "expenses.manage"
   | "attendance.manage"
   | "finance.view"
-  | "labour.manage";
+  | "labour.manage"
+  | "customers.use"
+  | "customers.manage"
+  | "customers.view_spend";
 
-const cashier: Permission[] = ["sell"];
+// Cashiers can find, add and attach customers (they are serving them). Changing or correcting a customer is a manager's job.
+const cashier: Permission[] = ["sell", "customers.use"];
 
 const manager: Permission[] = [
   ...cashier,
@@ -31,10 +35,11 @@ const manager: Permission[] = [
   "purchases.manage",
   "expenses.manage",
   "attendance.manage",
+  "customers.manage",
 ];
 
 // Profit figures and payroll are the owner's business: wages and margins are private.
-const owner: Permission[] = [...manager, "users.manage", "settings.manage", "finance.view", "labour.manage"];
+const owner: Permission[] = [...manager, "users.manage", "settings.manage", "finance.view", "labour.manage", "customers.view_spend"];
 
 const grants: Record<Role, ReadonlySet<Permission>> = {
   cashier: new Set(cashier),

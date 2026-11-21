@@ -5,6 +5,7 @@ import { Backups } from "./Backups";
 import { Checkout } from "./Checkout";
 import { useApp } from "./context";
 import { Costs } from "./Costs";
+import { Customers } from "./Customers";
 import { Kitchen } from "./Kitchen";
 import { Login, Setup } from "./Login";
 import { Money } from "./Money";
@@ -21,6 +22,7 @@ const tabs: { id: string; label: string; needs: Permission }[] = [
   { id: "checkout", label: "Checkout", needs: "sell" },
   { id: "orders", label: "Orders", needs: "sell" },
   { id: "kitchen", label: "Kitchen", needs: "sell" },
+  { id: "customers", label: "Customers", needs: "customers.use" },
   { id: "shift", label: "Shift", needs: "sell" },
   { id: "sales", label: "Sales", needs: "sell" },
   { id: "money", label: "Money", needs: "finance.view" },
@@ -112,6 +114,7 @@ function Shell() {
         {active === "checkout" && <Checkout onOpenShift={() => setTab("shift")} />}
         {active === "orders" && <Orders onOpenShift={() => setTab("shift")} />}
         {active === "kitchen" && <Kitchen />}
+        {active === "customers" && <Customers />}
         {active === "shift" && <ShiftScreen />}
         {active === "sales" && <Sales />}
         {active === "money" && <Money />}

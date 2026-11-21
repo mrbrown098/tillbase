@@ -346,6 +346,63 @@ export const migrations: Migration[] = [
       ALTER TABLE orders ADD COLUMN split_from TEXT REFERENCES orders(id);
     `,
   },
+  {
+    version: 6,
+    sql: `
+      -- Customers, loyalty points and a prepaid wallet.
+      -- points and wallet_minor are never edited by hand: the triggers below keep them equal to the
+      -- sum of the customer's ledger rows, and the ledger can only be added to.
+      CREATE TABLE customers (
+        id           TEXT PRIMARY KEY,
+        name         TEXT NOT NULL,
+        phone        TEXT,
+        address      TEXT,
+        notes        TEXT,
+        points       INTEGER NOT NULL DEFAULT 0,
+        wallet_minor INTEGER NOT NULL DEFAULT 0 CHECK (wallet_minor >= 0),
+        created_at   TEXT NOT NULL
+      );
+      -- A phone number belongs to one customer. Customers without a phone are allowed.
+      CREATE UNIQUE INDEX idx_customers_phone ON customers(phone) WHERE phone IS NOT NULL;
+      CREATE INDEX idx_customers_name ON customers(name COLLATE NOCASE);
+
+      CREATE TABLE customer_ledger (
+        id          TEXT PRIMARY KEY,
+        customer_id TEXT NOT NULL REFERENCES customers(id),
+        account     TEXT NOT NULL CHECK (account IN ('points', 'wallet')),
+        delta       INTEGER NOT NULL CHECK (delta <> 0),
+        reason      TEXT NOT NULL CHECK (reason IN
+                      ('earn', 'redeem', 'spend', 'topup', 'adjust', 'void_earn', 'void_redeem', 'void_spend')),
+        sale_id     TEXT REFERENCES sales(id),
+        user_id     TEXT,
+        note        TEXT,
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX idx_ledger_customer ON customer_ledger(customer_id, created_at);
+      CREATE INDEX idx_ledger_sale ON customer_ledger(sale_id);
+
+      CREATE TRIGGER customer_ledger_no_update BEFORE UPDATE ON customer_ledger
+      BEGIN SELECT RAISE(ABORT, 'The customer ledger cannot be changed. Add a correcting entry instead.'); END;
+      CREATE TRIGGER customer_ledger_no_delete BEFORE DELETE ON customer_ledger
+      BEGIN SELECT RAISE(ABORT, 'The customer ledger cannot be changed. Add a correcting entry instead.'); END;
+      CREATE TRIGGER customer_ledger_balance AFTER INSERT ON customer_ledger
+      BEGIN
+        UPDATE customers
+           SET points       = points       + CASE WHEN NEW.account = 'points' THEN NEW.delta ELSE 0 END,
+               wallet_minor = wallet_minor + CASE WHEN NEW.account = 'wallet' THEN NEW.delta ELSE 0 END
+         WHERE id = NEW.customer_id;
+      END;
+
+      ALTER TABLE orders ADD COLUMN customer_id TEXT REFERENCES customers(id);
+      ALTER TABLE sales ADD COLUMN customer_id TEXT REFERENCES customers(id);
+      -- Points the sale earned and used, kept on the sale so the receipt never has to guess.
+      ALTER TABLE sales ADD COLUMN points_earned INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sales ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
+      -- 'other' payments can carry a name, e.g. 'wallet' for money taken from a customer's wallet.
+      ALTER TABLE payments ADD COLUMN label TEXT;
+      CREATE INDEX idx_sales_customer ON sales(customer_id);
+    `,
+  },
 ];
 
 /** Apply any migrations that have not run yet. Safe to call on every start. */

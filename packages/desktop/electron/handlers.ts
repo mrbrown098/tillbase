@@ -5,6 +5,7 @@ import {
   FinanceService,
   InventoryService,
   LabourService,
+  CustomerService,
   OrderService,
   ProductCsvService,
   PurchaseService,
@@ -76,6 +77,7 @@ export function createHandlers(
   const finance = new FinanceService(db);
   const orders = new OrderService(db, receiptPrefix);
   const productCsv = new ProductCsvService(db);
+  const customers = new CustomerService(db);
 
   let current: User | null = null;
   const needBackups = (): BackupManager => {
@@ -397,11 +399,68 @@ export function createHandlers(
       }
       return orders.cancel(orderId, reason);
     },
-    async payOrder(orderId, payments) {
+    async payOrder(orderId, payments, loyalty) {
       const user = authorize("sell");
       const shift = openShiftOrThrow();
-      const sale = orders.pay(orderId, { payments, shiftId: shift.id, userId: user.id, cashier: user.name });
+      const sale = orders.pay(orderId, {
+        payments, shiftId: shift.id, userId: user.id, cashier: user.name,
+        redeemPoints: loyalty?.redeemPoints, walletMinor: loyalty?.walletMinor,
+      });
       return { sale, receipt: receipt(sale) };
+    },
+    // ---- Customers, points and wallet ----------------------------------
+    async searchCustomers(query) {
+      authorize("customers.use");
+      return customers.search(query);
+    },
+    async getCustomer(id) {
+      authorize("customers.use");
+      const c = customers.get(id);
+      if (!c) throw new Error("Customer not found");
+      return c;
+    },
+    async createCustomer(input) {
+      authorize("customers.use");
+      return customers.create(input);
+    },
+    async updateCustomer(id, patch) {
+      authorize("customers.manage");
+      return customers.update(id, patch);
+    },
+    async customerHistory(id) {
+      const user = authorize("customers.manage");
+      return customers.history(id, can(user.role, "customers.view_spend"));
+    },
+    async customerLedger(id) {
+      authorize("customers.manage");
+      return customers.ledger(id);
+    },
+    async adjustCustomerPoints(id, delta, note) {
+      const user = authorize("customers.manage");
+      return customers.adjustPoints(id, delta, note, user.id);
+    },
+    async adjustCustomerWallet(id, deltaMinor, note) {
+      const user = authorize("customers.manage");
+      return customers.adjustWallet(id, deltaMinor, note, user.id);
+    },
+    async topUpWallet(id, amountMinor, method, note) {
+      const user = authorize("customers.manage");
+      if (method !== "cash" && method !== "card") throw new Error("Choose cash or card for the top-up");
+      // Cash put in a wallet goes into the drawer, so it is recorded on the shift. Do both or neither.
+      const shift = method === "cash" ? openShiftOrThrow() : null;
+      return db.transaction(() => {
+        const c = customers.topUp(id, amountMinor, [method === "cash" ? "Cash" : "Card", note?.trim()].filter(Boolean).join(" · "), user.id);
+        if (shift) shifts.addCashMovement(shift.id, user.id, amountMinor, `Wallet top-up for ${c.name}`);
+        return c;
+      })();
+    },
+    async getLoyalty() {
+      authorize("customers.use");
+      return customers.config();
+    },
+    async setLoyalty(config) {
+      authorize("customers.manage");
+      return customers.setConfig(config);
     },
     // Splitting does not remove any food or change a price, so any seller may do it, even for items already sent.
     async splitOrder(orderId, picks) {

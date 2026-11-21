@@ -264,7 +264,7 @@ describe("upgrading", () => {
 
     migrate(old);
 
-    expect(old.pragma("user_version", { simple: true })).toBe(5);
+    expect(old.pragma("user_version", { simple: true })).toBe(migrations.length);
     // Old rows are intact and the new columns start at their neutral values.
     const held = new OrderService(old).get("held")!;
     expect(held).toMatchObject({ token: 2, tableLabel: "7", status: "open", deliveryFeeMinor: 0, splitFrom: null, subtotalMinor: 90_000 });
@@ -278,7 +278,7 @@ describe("upgrading", () => {
     expect(fee.deliveryFeeMinor).toBe(15_000);
     expect(svc.splitItems("held", [{ itemId: "i1", qty: 1 }]).created.items[0]!.qty).toBe(1);
     migrate(old);
-    expect(old.pragma("user_version", { simple: true })).toBe(5);
+    expect(old.pragma("user_version", { simple: true })).toBe(migrations.length);
   });
 });
 
