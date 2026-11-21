@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   BackupManager,
@@ -244,7 +244,7 @@ describe("restoring", () => {
 
   it("keeps an earlier safety copy instead of overwriting it, and only the newest few", async () => {
     const file = await manager.backupNow();
-    const name = file.split("/").pop()!;
+    const name = basename(file);
     for (let i = 0; i < 7; i++) {
       manager.restore(name, "computer", () => {
         try {

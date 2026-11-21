@@ -17,6 +17,7 @@ export function Money() {
   const [preset, setPreset] = useState<keyof typeof periods | "custom">("today");
   const [range, setRange] = useState(periods.today());
   const [pl, setPl] = useState<ProfitAndLoss | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -29,6 +30,18 @@ export function Money() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const exportForAccountant = async () => {
+    setExporting(true);
+    try {
+      const saved = await api.exportAccounting(range.from, range.to);
+      if (saved) toast(`Saved ${saved.names.length} files in ${saved.folder}`, "ok");
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const pick = (p: keyof typeof periods) => {
     setPreset(p);
@@ -194,6 +207,16 @@ export function Money() {
                 <li><span>Advances staff still owe</span><span>{money(pl.position.advancesOutstandingMinor)}</span></li>
                 <li><span>Sales tax collected (not your income)</span><span>{money(pl.taxCollectedMinor)}</span></li>
               </ul>
+            </section>
+            <section className="panel">
+              <h2>Export for your accountant</h2>
+              <p className="muted">
+                Five spreadsheet files for {range.from} to {range.to}: sales by day with tax, running costs by category,
+                purchases, payroll, and profit and loss. They open in Excel.
+              </p>
+              <button className="btn btn-primary" disabled={exporting} onClick={() => void exportForAccountant()}>
+                {exporting ? "Saving..." : "Save the files..."}
+              </button>
             </section>
           </div>
         </>

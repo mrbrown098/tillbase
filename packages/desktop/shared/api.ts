@@ -226,6 +226,8 @@ export interface TillbaseApi {
 
   // Money: where it comes from and where it goes
   profitAndLoss(from: string, to: string): Promise<ProfitAndLoss>;
+  /** Save the five accountant CSV files for a date range into a folder the person picks. Null if they cancel. */
+  exportAccounting(from: string, to: string): Promise<{ folder: string; names: string[] } | null>;
   backupNow(): Promise<string>;
   // Backups screen (owner only)
   backupStatus(): Promise<BackupStatus>;
@@ -292,6 +294,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "payrollPreview","runPayroll","payPayslip","payslips",
   "profitAndLoss","backupNow",
   "backupStatus","chooseBackupFolder","clearBackupFolder","restoreBackup",
+  "exportAccounting",
   "salesSummary",
   "updateSettings",
   "listStaff",
