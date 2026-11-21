@@ -4,7 +4,7 @@
 
 Sell, take orders, run the kitchen, track stock and recipes, record purchases and costs, pay your staff, and see in one screen whether the business is making money and where it is going. It runs on your own computer, works without the internet, and costs nothing. No subscription, no per-user or per-branch fees.
 
-> **Status: early development (v0.4).** Everything listed under "What it does" is built and tested. Installers, an Urdu interface and multi-branch are still to come (see [Roadmap](#roadmap)). **Tillbase is not yet approved for FBR, PRA or SRB tax-authority integration.** Do not rely on it for tax filing until that exists.
+> **Status: early development (v0.4).** Everything listed under "What it does" is built and tested. Installers are built on every release; an Urdu interface and multi-branch are still to come (see [Roadmap](#roadmap)). **Tillbase is not yet approved for FBR, PRA or SRB tax-authority integration.** Do not rely on it for tax filing until that exists.
 
 ## Why Tillbase
 
@@ -39,28 +39,31 @@ Sell, take orders, run the kitchen, track stock and recipes, record purchases an
 
 ## Being built right now
 
-| Work | What |
-|---|---|
-| Installers and CI | Windows, macOS and Linux installers on GitHub Releases, and automatic tests on all three systems |
-| Business mode and sponsors | Retail / restaurant mode switch, first-run guide, sponsor banner slots |
+Three people work on Tillbase in parallel, each on separate parts of the code so nothing collides.
+
+| Work | What | Status |
+|---|---|---|
+| Customers and loyalty | Customer records on orders, order history, points and wallet, receipts that show them | In progress |
+| Thermal printing | Direct ESC/POS receipt and kitchen-ticket printing, cash drawer kick | Next |
+| First release and screenshots | Version 0.4.0 release, changelog, real screenshots in this README | In progress |
+| Backups and accountant reports | Copy backups to a USB or synced folder, restore from a backup, CSV export of sales, costs and profit | In progress |
+| First-run setup | Currency and country on first start, business mode (retail or restaurant), business-day cutoff, sponsor banner slots | In progress |
+
+Already done and merged: installers for Windows, macOS and Linux (built on every release), automatic tests and an app start-up check on all three systems, delivery fees, split payments and split bills.
 
 ## Up next
 
 In rough priority order (details in [docs/ROADMAP.md](docs/ROADMAP.md)):
 
-1. First-run setup that asks for currency and country (a new install currently starts in US dollars).
-2. **Business-day cutoff**, so a restaurant open past midnight keeps one day's tokens and profit together.
-3. Urdu interface and Urdu on receipts.
-4. Backups to a second place (USB or a synced folder), not only next to the database.
-5. Reports for the accountant (CSV and printable), and Money-screen export.
-6. Direct thermal printing (ESC/POS), cash drawer kick, silent printing.
-7. Customers, loyalty and a wallet; dual tax rates for cash and card.
-8. Purchase orders, expiry tracking, supplier statements, recurring expenses.
-9. Several terminals on one network, then multi-branch with sync.
+1. Urdu interface and Urdu on receipts.
+2. Dual tax rates for cash and card; combos and per-item discounts on orders.
+3. Purchase orders, expiry tracking, supplier statements, recurring expenses.
+4. Auto-update and signed installers (removes the "unknown publisher" warning).
+5. Several terminals on one network, then multi-branch with sync.
 
 ## Quick start
 
-Requires **Node.js 22 or newer** (check with `node --version`; Node 20 is end-of-life and the SQLite module no longer ships ready-made binaries for it). (Ready-made installers are being built; until then, run it from source.)
+Requires **Node.js 22 or newer** (check with `node --version`; Node 20 is end-of-life and the SQLite module no longer ships ready-made binaries for it). Ready-made installers for Windows, macOS and Linux are attached to each [release](../../releases); the steps below run it from source.
 
 ```bash
 git clone https://github.com/mrbrown098/tillbase.git
@@ -117,7 +120,7 @@ Amounts are in minor units and tax rates in basis points: `1800` means 18.00%.
 - [x] Menu CSV import and export
 - [x] Daily backups
 - [x] Delivery fees, split payments, split bills
-- [ ] Installers for Windows, macOS and Linux; CI on all three
+- [x] Installers for Windows, macOS and Linux; CI on all three
 - [ ] Business mode switch, first-run guide, sponsor banners
 - [ ] First-run currency and country; business-day cutoff
 - [ ] Urdu interface and receipts

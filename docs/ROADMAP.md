@@ -34,7 +34,7 @@ Source for the competitor facts: [pricing](https://www.granetpro.com/pricing.htm
 
 ## Audit notes (November 2026)
 
-A full review of the code found no security or correctness blockers: 0 known vulnerabilities in production dependencies, every one of the 78 API methods matched to a handler, every handler except the public settings read checks permissions, and Electron runs with context isolation, sandbox and a content security policy. The gaps that matter most for a real shop are, in order: the first-run currency and country (new installs start in US dollars), a business-day cutoff for late-night trading, an Urdu interface, off-site backups, and database indexes for voids and the wastage report as data grows. Installers and cross-platform CI are in progress. These are in "Planned phases" below.
+A full review of the code found no security or correctness blockers: 0 known vulnerabilities in production dependencies, every one of the 78 API methods matched to a handler, every handler except the public settings read checks permissions, and Electron runs with context isolation, sandbox and a content security policy. The gaps that matter most for a real shop are, in order: the first-run currency and country (new installs start in US dollars), a business-day cutoff for late-night trading, an Urdu interface, off-site backups, and database indexes for voids and the wastage report as data grows. Installers and cross-platform CI are done. These are in "Planned phases" below.
 
 ## Planned phases
 
@@ -51,7 +51,7 @@ Still to do: purchase orders, expiry tracking, supplier ledger statements, recur
 Several terminals on one local network, then multi-branch with sync when online, plus an owner dashboard.
 
 **Phase 6: hardware and shipping**
-Direct ESC/POS thermal printing and cash drawer kick, silent printing, installers for Windows, macOS and Linux (in progress), translations including Urdu.
+Direct ESC/POS thermal printing and cash drawer kick, silent printing, translations including Urdu.
 
 ## Compliance note (important)
 
