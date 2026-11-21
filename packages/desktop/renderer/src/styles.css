@@ -842,3 +842,15 @@ tr.inactive td {
 .split-problem { border-color: var(--danger) !important; }
 /* Cash, Card and Other fit on one row (the base style has room for two). */
 .methods:has(> :nth-child(3)) { grid-template-columns: repeat(3, 1fr); }
+
+/* Wide amounts such as "Rs 352,024.57" must stay inside their boxes. These sit at the end on purpose,
+   so no existing rule is edited. */
+.stats {
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+}
+.stat-value {
+  overflow-wrap: anywhere;
+}
+.cart-line-bottom {
+  gap: 6px;
+}
