@@ -5,6 +5,9 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 ## [Unreleased]
 
 ### Added
+- Backups to a second place: the owner can choose a USB drive or a Dropbox or Google Drive folder on the new Backups screen, and every backup is copied there too. A missing folder never stops selling; it shows a plain warning.
+- Restore from a backup (owner only): the backup is checked first, the current data is kept as `tillbase.sqlite.before-restore`, and Tillbase restarts on the restored data.
+- Export for your accountant: on the Money screen (owner only), save five Excel-ready CSV files for any date range: sales by day with tax, running costs by category, purchases, payroll, and profit and loss.
 - Customers and loyalty: customer records with phone search at the till and on orders (quick-add included), points earned on every sale at a rate the shop sets (default 1 point per 100.00 of items before tax), points used as a discount on the items, a prepaid wallet, and a Customers screen with history, a points and wallet ledger, top-ups and manager corrections. Receipts show points used and earned and the balances. Delivery orders fill in the address from the customer. Only the owner sees what a customer has spent.
 - Database migration 6 (customers, an append-only customer ledger, customer links on orders and sales).
 

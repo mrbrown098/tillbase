@@ -1,5 +1,6 @@
 import { app, dialog, type BrowserWindow } from "electron";
 import { readFile, stat, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
 import { basename, extname, join } from "node:path";
 import type { ProductCsvFile } from "../shared/api.js";
 
@@ -24,6 +25,8 @@ export function decodeCsv(bytes: Uint8Array): string {
  *
  *   TILLBASE_TEST_CSV_OPEN=/path/in.csv    "Choose a file to import" reads this file
  *   TILLBASE_TEST_CSV_SAVE=/path/out.csv   "Export" and "Download template" write to this file
+ *   TILLBASE_TEST_BACKUP_FOLDER=/path/dir  "Choose a second backup place" picks this folder
+ *   TILLBASE_TEST_EXPORT_FOLDER=/path/dir  "Export for your accountant" writes its files into this folder
  *
  * Safe by design: environment variables belong to the main process, so the page (renderer) cannot
  * set or change them, and they are ignored completely in an installed (packaged) app. When they are
@@ -31,7 +34,7 @@ export function decodeCsv(bytes: Uint8Array): string {
  * size, readable) still runs on the supplied path, so the test exercises the real code.
  */
 export function testPath(
-  name: "TILLBASE_TEST_CSV_OPEN" | "TILLBASE_TEST_CSV_SAVE",
+  name: "TILLBASE_TEST_CSV_OPEN" | "TILLBASE_TEST_CSV_SAVE" | "TILLBASE_TEST_EXPORT_FOLDER" | "TILLBASE_TEST_BACKUP_FOLDER",
   env: Record<string, string | undefined>,
   isPackaged: boolean,
 ): string | null {
@@ -49,6 +52,61 @@ export function testPath(
  */
 export function createFileDialogs(getWindow: () => BrowserWindow | null) {
   return {
+    /** The folder picked as a second backup place (a USB drive or a synced folder), or null if cancelled. */
+    async chooseBackupFolder(): Promise<string | null> {
+      const forced = testPath("TILLBASE_TEST_BACKUP_FOLDER", process.env, app.isPackaged);
+      if (forced) return forced;
+      const options = {
+        title: "Choose where to keep a second copy of your backups",
+        buttonLabel: "Use this folder",
+        properties: ["openDirectory" as const, "createDirectory" as const],
+      };
+      const win = getWindow();
+      const picked = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+      return picked.canceled ? null : (picked.filePaths[0] ?? null);
+    },
+
+    /**
+     * Ask for a folder and write the accountant's files into it. A file that already exists is never
+     * overwritten: the new one gets "(2)", "(3)"... in its name. Returns null if the person cancelled.
+     */
+    async saveFiles(files: { name: string; text: string }[]): Promise<{ folder: string; names: string[] } | null> {
+      let folder = testPath("TILLBASE_TEST_EXPORT_FOLDER", process.env, app.isPackaged);
+      if (!folder) {
+        const options = {
+          title: "Choose where to save the files for your accountant",
+          buttonLabel: "Save here",
+          defaultPath: app.getPath("documents"),
+          properties: ["openDirectory" as const, "createDirectory" as const],
+        };
+        const win = getWindow();
+        const picked = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+        if (picked.canceled || !picked.filePaths[0]) return null;
+        folder = picked.filePaths[0];
+      }
+      const names: string[] = [];
+      try {
+        for (const f of files) {
+          const safe = basename(f.name);
+          const ext = extname(safe);
+          const stem = safe.slice(0, safe.length - ext.length);
+          for (let n = 1; ; n++) {
+            const name = n === 1 ? safe : `${stem} (${n})${ext}`;
+            try {
+              await writeFile(join(folder, name), f.text, { encoding: "utf8", flag: constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL });
+              names.push(name);
+              break;
+            } catch (e) {
+              if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+            }
+          }
+        }
+      } catch {
+        throw new Error("Tillbase could not save the files there. Please pick another folder.");
+      }
+      return { folder, names };
+    },
+
     async openCsv(): Promise<ProductCsvFile | null> {
       const options = {
         title: "Choose your product list",
