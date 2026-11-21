@@ -4,6 +4,9 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ## [Unreleased]
 
+### Added
+- The sponsor list (`ads/`): an empty, validated `manifest.json` (zero sponsors), its JSON schema, the written sponsor policy, and a checker (`scripts/validate-ads.mjs`) that runs in CI on every pull request that touches `ads/`. Nothing is shown in the app yet.
+
 ### Fixed
 - Installing from source with npm 11.2x and newer no longer leaves Electron without its program file ("Electron failed to install correctly"): the packages that need their install step (Electron, esbuild, SQLite) are now approved in `package.json`.
 - Installing from source with a recent npm (11 and newer) no longer fails with `EALLOWGIT`: a build tool that was fetched over git/SSH is now taken from the normal npm registry.

@@ -1,0 +1,13 @@
+{
+  "_comment": "Whole words (case-insensitive, also matched inside the sponsor name, text, id and link address) that are never allowed in an ad. See ads/README.md for the policy behind this list. Changing it is a pull request like any other.",
+  "words": [
+    "porn", "porno", "xxx", "nsfw", "escort", "escorts", "erotic", "sex", "sexy", "nude", "nudes", "adult",
+    "casino", "casinos", "gambling", "gamble", "bet", "bets", "betting", "poker", "lottery", "slots", "jackpot", "sportsbook",
+    "alcohol", "beer", "wine", "vodka", "whisky", "whiskey", "liquor", "booze", "cocktail", "cocktails",
+    "tobacco", "cigarette", "cigarettes", "cigar", "cigars", "vape", "vapes", "vaping", "nicotine", "hookah",
+    "loan", "loans", "payday", "credit repair", "debt relief",
+    "crypto", "cryptocurrency", "bitcoin", "ethereum", "nft", "nfts", "forex", "airdrop", "get rich quick", "double your money",
+    "virus detected", "your computer is infected", "your device is infected", "security alert", "malware detected",
+    "click here", "act now", "you have won", "you won", "free gift", "winner"
+  ]
+}
