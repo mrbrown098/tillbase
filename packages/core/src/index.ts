@@ -59,3 +59,10 @@ export type { BreakdownLine, DailyPoint, ItemProfit, ProfitAndLoss } from "./fin
 export { backupDatabase } from "./backup.js";
 export { OrderService, orderTypes, orderTypeLabel, kitchenStatuses } from "./orders.js";
 export type { Modifier, ModifierInput, Order, OrderInput, OrderItem, OrderType, KitchenStatus, KitchenTicket } from "./orders.js";
+export {
+  BackupManager, backupNamePattern, checkFolder, copyBackupToFolder, listBackups, readBackupConfig,
+  restoreFromBackup, writeBackupConfig,
+} from "./backup.js";
+export type {
+  BackupConfig, BackupEntry, BackupFile, BackupManagerOptions, BackupStatus, BackupWhere, RestoreOptions, RestoreResult,
+} from "./backup.js";

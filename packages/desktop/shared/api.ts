@@ -1,4 +1,6 @@
 import type {
+  BackupStatus,
+  BackupWhere,
   AttendanceRecord,
   KitchenStatus,
   KitchenTicket,
@@ -201,6 +203,11 @@ export interface TillbaseApi {
   // Money: where it comes from and where it goes
   profitAndLoss(from: string, to: string): Promise<ProfitAndLoss>;
   backupNow(): Promise<string>;
+  // Backups screen (owner only)
+  backupStatus(): Promise<BackupStatus>;
+  chooseBackupFolder(): Promise<BackupStatus | null>;
+  clearBackupFolder(): Promise<BackupStatus>;
+  restoreBackup(name: string, where: BackupWhere): Promise<void>;
 
   // Reports and settings
   salesSummary(from: string, to: string): Promise<SalesSummary>;
@@ -258,6 +265,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "listEmployees","createEmployee","updateEmployee","giveAdvance",
   "payrollPreview","runPayroll","payPayslip","payslips",
   "profitAndLoss","backupNow",
+  "backupStatus","chooseBackupFolder","clearBackupFolder","restoreBackup",
   "salesSummary",
   "updateSettings",
   "listStaff",

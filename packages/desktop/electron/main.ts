@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { backupDatabase, openDatabase } from "@tillbase/core";
+import { BackupManager, openDatabase } from "@tillbase/core";
 import { channels, type IpcResult, type TillbaseApi } from "../shared/api.js";
 import { createFileDialogs } from "./files.js";
 import { createHandlers } from "./handlers.js";
@@ -62,15 +62,21 @@ void app.whenReady().then(() => {
   const path = databasePath();
   console.log(`Tillbase data file: ${path}`);
   const db = openDatabase(path);
-  // Daily copies of the shop's data, kept next to it. Skipped for in-memory test databases.
-  const backupDir = join(dirname(path), "backups");
-  const backup = () => backupDatabase(db, backupDir);
+  // Daily copies of the shop's data, kept next to it and, if the owner chose one, in a second place too.
+  // Skipped for in-memory test databases.
+  const backups = new BackupManager(db, { dbPath: path });
+  const backup = () => backups.backupNow();
   const quietBackup = () => {
     if (path !== ":memory:") backup().catch((e) => console.error("Backup failed:", e));
   };
   quietBackup();
   const files = createFileDialogs(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
-  registerIpc(createHandlers(db, "T1", Date.now, { backup, afterShiftClose: quietBackup, files }));
+  const afterRestore = () => {
+    // The old connection is closed and the files are swapped: start again on the restored data.
+    app.relaunch();
+    app.exit(0);
+  };
+  registerIpc(createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, afterShiftClose: quietBackup, files }));
   createWindow();
 
   app.on("activate", () => {

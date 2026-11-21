@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  BackupManager,
   ExpenseService,
   FinanceService,
   InventoryService,
@@ -48,11 +49,16 @@ export function createHandlers(
   now: () => number = Date.now,
   hooks: {
     backup?: () => Promise<string>;
+    /** Backups, the second place and restore (see BackupManager). */
+    backups?: BackupManager;
+    /** Called after a restore has swapped the data in: the app must restart. */
+    afterRestore?: () => void;
     afterShiftClose?: () => void;
     /** Native file dialogs, supplied by the Electron main process. Each returns null if the person cancels. */
     files?: {
       openCsv: () => Promise<ProductCsvFile | null>;
       saveCsv: (suggestedName: string, text: string) => Promise<string | null>;
+      chooseBackupFolder?: () => Promise<string | null>;
     };
   } = {},
 ): TillbaseApi {
@@ -72,6 +78,10 @@ export function createHandlers(
   const productCsv = new ProductCsvService(db);
 
   let current: User | null = null;
+  const needBackups = (): BackupManager => {
+    if (!hooks.backups) throw new Error("Backups are not available here");
+    return hooks.backups;
+  };
 
   const publicUser = (u: User) => ({ id: u.id, name: u.name, role: u.role });
 
@@ -552,6 +562,29 @@ export function createHandlers(
       authorize("settings.manage");
       if (!hooks.backup) throw new Error("Backups are not available here");
       return hooks.backup();
+    },
+    async backupStatus() {
+      authorize("settings.manage");
+      return needBackups().status();
+    },
+    async chooseBackupFolder() {
+      authorize("settings.manage");
+      const manager = needBackups();
+      if (!hooks.files?.chooseBackupFolder) throw new Error("Choosing a folder is not available here");
+      const folder = await hooks.files.chooseBackupFolder();
+      return folder ? manager.setSecondFolder(folder) : null;
+    },
+    async clearBackupFolder() {
+      authorize("settings.manage");
+      return needBackups().clearSecondFolder();
+    },
+    async restoreBackup(name, where) {
+      authorize("settings.manage");
+      const manager = needBackups();
+      // closeLive is called only after the backup has passed every check.
+      manager.restore(name, where, () => db.close());
+      current = null;
+      hooks.afterRestore?.();
     },
 
     // ---- Reports and settings -----------------------------------------
