@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { taxFor } from "@tillbase/core/money";
-import type { Modifier, Order, OrderType, PaymentMethod } from "@tillbase/core";
+import type { Modifier, Order, OrderType, PaymentInput } from "@tillbase/core";
 import type { ProductWithStock } from "../../shared/api";
 import { api } from "./api";
 import { PayModal } from "./Checkout";
 import { useApp } from "./context";
+import { minorToInput, parseMoney } from "./format";
 import { Modal, ReceiptView } from "./Modal";
 
 const typeLabel: Record<OrderType, string> = { dine_in: "Dine-in", takeaway: "Takeaway", delivery: "Delivery" };
@@ -22,6 +23,7 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
   const [picking, setPicking] = useState<ProductWithStock | null>(null);
   const [paying, setPaying] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [splitting, setSplitting] = useState(false);
   const [ticket, setTicket] = useState<string | null>(null);
   const [done, setDone] = useState<{ receipt: string; change: number; no: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -62,7 +64,9 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
       sub += i.lineMinor;
       tax += taxFor(i.lineMinor, taxOf.get(i.productId) ?? 0);
     }
-    return { sub, tax, total: sub + tax };
+    // The delivery charge is added at payment as its own untaxed line.
+    const fee = active?.type === "delivery" ? active.deliveryFeeMinor : 0;
+    return { sub, tax, fee, total: sub + tax + fee };
   }, [active, taxOf]);
 
   const run = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -99,9 +103,9 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
     );
   };
 
-  const finish = async (method: PaymentMethod, tendered: number) => {
+  const finish = async (payments: PaymentInput[]) => {
     if (!active) return;
-    const r = await run(() => api.payOrder(active.id, [{ method, amountMinor: tendered }]));
+    const r = await run(() => api.payOrder(active.id, payments));
     if (!r) return;
     setPaying(false);
     setDone({ receipt: r.receipt, change: r.sale.changeMinor, no: r.sale.receiptNo });
@@ -109,6 +113,8 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
   };
 
   const unsent = active?.items.some((i) => !i.sent) ?? false;
+  // A bill can be split when there is more than one thing on it to hand over (the original keeps at least one).
+  const canSplit = !!active && (active.items.length > 1 || (active.items[0]?.qty ?? 0) >= 2);
 
   return (
     <div className="orders">
@@ -212,11 +218,13 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
               <dl className="totals">
                 <div><dt>Subtotal</dt><dd>{money(totals.sub)}</dd></div>
                 {totals.tax > 0 && <div><dt>Tax</dt><dd>{money(totals.tax)}</dd></div>}
+                {totals.fee > 0 && <div><dt>Delivery</dt><dd>{money(totals.fee)}</dd></div>}
                 <div className="grand"><dt>Total</dt><dd>{money(totals.total)}</dd></div>
               </dl>
               <div className="cart-actions">
                 <button className="btn btn-danger" onClick={() => setCancelling(true)}>Cancel order</button>
                 <button className="btn" disabled={!unsent} onClick={() => void send()}>Send to kitchen</button>
+                <button className="btn" disabled={!canSplit} title={canSplit ? "Move some items to a separate bill" : "Needs at least two items or two of one item"} onClick={() => setSplitting(true)}>Split bill</button>
                 <button className="btn btn-primary btn-lg" disabled={active.items.length === 0 || !session.shift} onClick={() => setPaying(true)}>
                   Pay {active.items.length ? money(totals.total) : ""}
                 </button>
@@ -259,6 +267,18 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
             const p = picking;
             setPicking(null);
             void addProduct(p, ids, note, qty);
+          }}
+        />
+      )}
+      {splitting && active && (
+        <SplitModal
+          order={active}
+          onClose={() => setSplitting(false)}
+          onSplit={async (picks) => {
+            const r = await api.splitOrder(active.id, picks);
+            setSplitting(false);
+            await reload(r.created.id);
+            toast(`Bill split. You are now on #${r.created.token}`);
           }}
         />
       )}
@@ -307,21 +327,25 @@ function OrderDetails({
   title: string;
   order?: Order;
   onClose: () => void;
-  onSave: (v: { type: OrderType; tableLabel: string; customerName: string; customerPhone: string; deliveryAddress: string; note: string }) => Promise<void>;
+  onSave: (v: { type: OrderType; tableLabel: string; customerName: string; customerPhone: string; deliveryAddress: string; deliveryFeeMinor: number; note: string }) => Promise<void>;
 }) {
   const [type, setType] = useState<OrderType>(order?.type ?? "takeaway");
   const [tableLabel, setTable] = useState(order?.tableLabel ?? "");
   const [customerName, setName] = useState(order?.customerName ?? "");
   const [customerPhone, setPhone] = useState(order?.customerPhone ?? "");
   const [deliveryAddress, setAddress] = useState(order?.deliveryAddress ?? "");
+  const [fee, setFee] = useState(order && order.deliveryFeeMinor > 0 ? minorToInput(order.deliveryFeeMinor) : "");
   const [note, setNote] = useState(order?.note ?? "");
   const [error, setError] = useState("");
   const save = async () => {
     if (type === "delivery" && (!deliveryAddress.trim() || !customerPhone.trim())) {
       return setError("Delivery needs a phone number and an address");
     }
+    // Blank means no charge. Anything else must be an amount like 150 or 150.50.
+    const deliveryFeeMinor = type === "delivery" && fee.trim() !== "" ? parseMoney(fee) : 0;
+    if (deliveryFeeMinor === null) return setError("Delivery charge must be an amount like 150 or 150.50");
     try {
-      await onSave({ type, tableLabel, customerName, customerPhone, deliveryAddress, note });
+      await onSave({ type, tableLabel, customerName, customerPhone, deliveryAddress, deliveryFeeMinor, note });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -345,6 +369,7 @@ function OrderDetails({
         <>
           <label className="field">Phone<input value={customerPhone} onChange={(e) => setPhone(e.target.value)} /></label>
           <label className="field">Address<input value={deliveryAddress} onChange={(e) => setAddress(e.target.value)} /></label>
+          <label className="field">Delivery charge (optional)<input inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="0.00" /></label>
         </>
       )}
       <label className="field">Note for the kitchen (optional)<input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} /></label>
@@ -352,6 +377,91 @@ function OrderDetails({
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={() => void save()}>{order ? "Save" : "Start order"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Choose what moves to a separate bill. Whole units only; the bill you are on always keeps something. */
+function SplitModal({
+  order,
+  onClose,
+  onSplit,
+}: {
+  order: Order;
+  onClose: () => void;
+  onSplit: (picks: { itemId: string; qty: number }[]) => Promise<void>;
+}) {
+  const { money } = useApp();
+  const [moving, setMoving] = useState<Record<string, number>>({});
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const picks = order.items.filter((i) => (moving[i.id] ?? 0) > 0).map((i) => ({ itemId: i.id, qty: moving[i.id]! }));
+  const movedMinor = order.items.reduce((s, i) => s + Math.round(((moving[i.id] ?? 0) / i.qty) * i.lineMinor), 0);
+  const keepsSomething = order.items.some((i) => (moving[i.id] ?? 0) < i.qty);
+  const set = (id: string, qty: number) => {
+    setError("");
+    setMoving((m) => ({ ...m, [id]: qty }));
+  };
+
+  const create = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onSplit(picks);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={`Split bill #${order.token}`} onClose={onClose}>
+      <p className="muted small">Choose what goes on the new bill. The rest stays here. Food already in the kitchen is not cooked again.</p>
+      <ul className="split-items" aria-label="Items to move">
+        {order.items.map((i) => {
+          const n = moving[i.id] ?? 0;
+          const whole = Number.isInteger(i.qty);
+          return (
+            <li key={i.id}>
+              <div className="split-item-name">
+                <span>{i.qty} × {i.name}</span>
+                {(i.modifiers.length > 0 || i.note) && (
+                  <span className="muted small">{[...i.modifiers.map((m) => `+ ${m.name}`), i.note].filter(Boolean).join(" · ")}</span>
+                )}
+              </div>
+              <span className="muted">{money(i.lineMinor)}</span>
+              {whole ? (
+                <div className="stepper">
+                  <button className="btn" aria-label={`Move fewer ${i.name}`} disabled={n <= 0} onClick={() => set(i.id, n - 1)}>−</button>
+                  <span className="qty" aria-label={`${i.name} to move`}>{n}</span>
+                  <button className="btn" aria-label={`Move more ${i.name}`} disabled={n >= i.qty} onClick={() => set(i.id, n + 1)}>+</button>
+                </div>
+              ) : (
+                <label className="check">
+                  <input type="checkbox" checked={n > 0} onChange={(e) => set(i.id, e.target.checked ? i.qty : 0)} />
+                  Move all
+                </label>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <dl className="split-summary split-two">
+        <div><dt>New bill</dt><dd>{money(movedMinor)}</dd></div>
+        <div><dt>Stays on #{order.token}</dt><dd>{money(order.subtotalMinor - movedMinor)}</dd></div>
+      </dl>
+      {picks.length > 0 && !keepsSomething && (
+        <p className="form-error" role="alert">This bill must keep at least one item. To pay for everything, just pay the bill.</p>
+      )}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary btn-lg" disabled={picks.length === 0 || !keepsSomething || busy} onClick={() => void create()}>
+          Create new bill
+        </button>
       </div>
     </Modal>
   );

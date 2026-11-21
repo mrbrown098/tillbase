@@ -822,3 +822,23 @@ tr.inactive td {
   background: var(--panel);
   border-top: 1px solid var(--line);
 }
+
+
+/* ---- Split payments, delivery fee, split bills ---- */
+.split-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 12px; }
+.split-summary div { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; }
+.split-summary dt { font-size: 0.8rem; color: var(--muted); }
+.split-summary dd { margin: 2px 0 0; font-size: 1.25rem; font-weight: 700; }
+.split-remaining { border-color: var(--warn) !important; }
+.split-covered { border-color: var(--accent) !important; }
+.split-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; }
+.split-list li { display: flex; align-items: center; gap: 12px; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.split-list li span { flex: 1; }
+.modal-actions:has(.btn-lg) { flex-wrap: wrap; }
+.split-items { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; max-height: min(320px, 42vh); overflow: auto; }
+.split-items li { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.split-item-name { flex: 1; display: grid; }
+.split-two { grid-template-columns: repeat(2, 1fr); }
+.split-problem { border-color: var(--danger) !important; }
+/* Cash, Card and Other fit on one row (the base style has room for two). */
+.methods:has(> :nth-child(3)) { grid-template-columns: repeat(3, 1fr); }
