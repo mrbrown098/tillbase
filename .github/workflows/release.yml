@@ -1,0 +1,65 @@
+name: Release
+
+# Push a tag such as v0.2.0 to build the installers for Windows, macOS and Linux and attach them to a
+# DRAFT GitHub Release. Nothing is published until a person opens the draft and clicks "Publish".
+# Steps to cut a release are in docs/RELEASING.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check-version:
+    name: Check tag matches version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Tag must equal the version in every package.json
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          for f in package.json packages/core/package.json packages/desktop/package.json; do
+            version="$(node -p "require('./$f').version")"
+            if [ "v${version}" != "${tag}" ]; then
+              echo "::error file=${f}::Tag ${tag} does not match version ${version} in ${f}. Bump the version, commit, and tag again (see docs/RELEASING.md)."
+              exit 1
+            fi
+          done
+          echo "Tag ${tag} matches all package versions."
+
+  installers:
+    name: Build and test installers
+    needs: check-version
+    uses: ./.github/workflows/installers.yml
+
+  draft-release:
+    name: Create draft release
+    needs: installers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to create the release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: dist
+      - name: Checksums
+        run: |
+          cd dist
+          ls -la
+          sha256sum Tillbase-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          flags=""
+          case "${TAG}" in *-*) flags="--prerelease" ;; esac
+          gh release create "${TAG}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Tillbase ${TAG#v}" \
+            --draft ${flags} \
+            --generate-notes

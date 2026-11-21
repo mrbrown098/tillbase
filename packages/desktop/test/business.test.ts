@@ -1,6 +1,6 @@
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { backupDatabase, openDatabase, type Db } from "@tillbase/core";
 import { createHandlers } from "../electron/handlers";
@@ -121,7 +121,7 @@ describe("backups", () => {
       writeFileSync(join(dir, `tillbase-${d}.sqlite`), "x");
     }
     await backupDatabase(db, dir, 2);
-    expect(readdirSync(dir).sort()).toEqual([`tillbase-2020-01-03.sqlite`, file.split("/").pop()!].sort());
+    expect(readdirSync(dir).sort()).toEqual([`tillbase-2020-01-03.sqlite`, basename(file)].sort());
   });
 
   it("owner can trigger a backup through the API", async () => {
