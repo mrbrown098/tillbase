@@ -23,7 +23,11 @@ Where the shop's data lives (it is never inside the install folder, so updating 
 | macOS | `~/Library/Application Support/Tillbase` | `tillbase.sqlite` |
 | Linux | `~/.config/Tillbase` | `tillbase.sqlite` |
 
-Daily backups are kept in a `backups` folder next to the database. There is no automatic updater: to update, install the newer version over the old one. The data is kept.
+Daily backups are kept in a `backups` folder next to the database (the newest 14). The owner can also choose a second place, such as a USB drive or a Dropbox or Google Drive folder, on the **Backups** screen: every backup is copied there too (the newest 30 are kept). If that folder is missing, selling carries on and the screen shows a warning. The second place is remembered in `backup-settings.json` next to the database, not inside it, so restoring never changes it.
+
+**Restoring** (Backups screen, owner only): the chosen backup is copied aside and checked first (it must open, pass SQLite's integrity check, look like a Tillbase shop and not come from a newer Tillbase; an older one is upgraded). Only then is the current file kept as `tillbase.sqlite.before-restore` (earlier safety copies get a dated name; the newest five are kept) and the backup swapped in, and Tillbase restarts. Nothing is ever deleted by a restore, so to undo one, close Tillbase and rename the `.before-restore` file back to `tillbase.sqlite`.
+
+There is no automatic updater: to update, install the newer version over the old one. The data is kept.
 
 ## Before you tag: changelog and screenshots
 
