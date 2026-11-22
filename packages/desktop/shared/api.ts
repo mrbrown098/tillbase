@@ -30,6 +30,11 @@ import type {
   ProfitAndLoss,
   Purchase,
   PurchaseInput,
+  PurchaseOrder,
+  PurchaseOrderInput,
+  PurchaseOrderStatus,
+  ReceiveInput,
+  SupplierStatement,
   Recipe,
   LowStockItem,
   NewProduct,
@@ -201,6 +206,14 @@ export interface TillbaseApi {
   listPurchases(onlyUnpaid?: boolean): Promise<Purchase[]>;
   payables(): Promise<Payables>;
 
+  // Supplier purchase orders. Receiving goes through the purchasing service (stock, cost, what is owed).
+  createPurchaseOrder(input: Omit<PurchaseOrderInput, "userId">): Promise<PurchaseOrder>;
+  listPurchaseOrders(status?: PurchaseOrderStatus): Promise<PurchaseOrder[]>;
+  receivePurchaseOrder(id: string, input: Omit<ReceiveInput, "userId">, fromDrawer?: boolean): Promise<PurchaseOrder>;
+  cancelPurchaseOrder(id: string, reason?: string): Promise<PurchaseOrder>;
+  supplierNames(): Promise<string[]>;
+  supplierStatement(supplier: string, from?: string, to?: string): Promise<SupplierStatement>;
+
   // Running costs
   expenseCategories(): Promise<ExpenseCategory[]>;
   addExpenseCategory(name: string): Promise<ExpenseCategory>;
@@ -288,6 +301,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "adjustCustomerPoints","adjustCustomerWallet","topUpWallet","getLoyalty","setLoyalty",
   "listItems","getRecipe","setRecipe","recipeCosts",
   "recordPurchase","payPurchase","listPurchases","payables",
+  "createPurchaseOrder","listPurchaseOrders","receivePurchaseOrder","cancelPurchaseOrder","supplierNames","supplierStatement",
   "expenseCategories","addExpenseCategory","addExpense","voidExpense","listExpenses",
   "roster","clockIn","clockOut","attendance","addShiftRecord","removeShiftRecord",
   "listEmployees","createEmployee","updateEmployee","giveAdvance",

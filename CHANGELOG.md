@@ -4,6 +4,9 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ## [Unreleased]
 
+### Added
+- Supplier orders: place an order with a supplier, receive it in one or several deliveries (each delivery is booked as a normal purchase, so stock, average cost and what you owe update), cancel it, and see a supplier statement of purchases and payments.
+
 ### Fixed
 - Installing from source with npm 11.2x and newer no longer leaves Electron without its program file ("Electron failed to install correctly"): the packages that need their install step (Electron, esbuild, SQLite) are now approved in `package.json`.
 - Installing from source with a recent npm (11 and newer) no longer fails with `EALLOWGIT`: a build tool that was fetched over git/SSH is now taken from the normal npm registry.

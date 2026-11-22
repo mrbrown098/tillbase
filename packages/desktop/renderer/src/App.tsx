@@ -11,6 +11,7 @@ import { Login, Setup } from "./Login";
 import { Money } from "./Money";
 import { Orders } from "./Orders";
 import { Products } from "./Products";
+import { PurchaseOrders } from "./PurchaseOrders";
 import { Purchases } from "./Purchases";
 import { Sales } from "./Sales";
 import { Settings } from "./Settings";
@@ -28,6 +29,7 @@ const tabs: { id: string; label: string; needs: Permission }[] = [
   { id: "money", label: "Money", needs: "finance.view" },
   { id: "products", label: "Menu and stock", needs: "products.manage" },
   { id: "purchases", label: "Purchases", needs: "purchases.manage" },
+  { id: "orders-to-suppliers", label: "Supplier orders", needs: "purchases.manage" },
   { id: "costs", label: "Running costs", needs: "expenses.manage" },
   { id: "team", label: "Team and wages", needs: "attendance.manage" },
   { id: "staff", label: "Staff", needs: "users.manage" },
@@ -120,6 +122,7 @@ function Shell() {
         {active === "money" && <Money />}
         {active === "products" && <Products />}
         {active === "purchases" && <Purchases />}
+        {active === "orders-to-suppliers" && <PurchaseOrders />}
         {active === "costs" && <Costs />}
         {active === "team" && <Team />}
         {active === "staff" && <Staff />}
