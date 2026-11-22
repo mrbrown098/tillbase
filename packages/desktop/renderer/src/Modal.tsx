@@ -1,3 +1,4 @@
+import { useApp } from "./context";
 import { useEffect, type ReactNode } from "react";
 
 export function Modal({
@@ -40,6 +41,25 @@ export function Modal({
   );
 }
 
-export function ReceiptView({ text }: { text: string }) {
-  return <pre className="receipt">{text}</pre>;
+export function ReceiptView({ text, logo = true }: { text: string; logo?: boolean }) {
+  const { settings } = useApp();
+  return (
+    <div className="receipt-box">
+      {logo && settings.businessLogo && <img className="receipt-logo" src={settings.businessLogo} alt="" />}
+      <pre className="receipt">{text}</pre>
+    </div>
+  );
+}
+
+/**
+ * What the printer sees: the shop's logo (if it has one) above the receipt text. Hidden on screen, shown when printing.
+ */
+export function PrintArea({ text, logo = true }: { text: string; logo?: boolean }) {
+  const { settings } = useApp();
+  return (
+    <div id="print-area">
+      {logo && settings.businessLogo && <img className="print-logo" src={settings.businessLogo} alt="" />}
+      <pre>{text}</pre>
+    </div>
+  );
 }

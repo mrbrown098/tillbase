@@ -18,6 +18,10 @@ export interface Customer {
   points: number;
   /** Prepaid money the customer can spend (minor units). */
   walletMinor: number;
+  /** What they owe the shop on account (khata). Always the sum of their ledger rows. Negative means they have paid ahead. */
+  owedMinor: number;
+  /** The most they may owe. `null` means no limit. */
+  creditLimitMinor: number | null;
   createdAt: string;
 }
 
@@ -29,6 +33,8 @@ export interface CustomerSummary {
   address: string | null;
   points: number;
   walletMinor: number;
+  owedMinor: number;
+  creditLimitMinor: number | null;
 }
 
 export interface CustomerInput {
@@ -38,8 +44,10 @@ export interface CustomerInput {
   notes?: string | null;
 }
 
-export type LedgerAccount = "points" | "wallet";
-export type LedgerReason = "earn" | "redeem" | "spend" | "topup" | "adjust" | "void_earn" | "void_redeem" | "void_spend";
+export type LedgerAccount = "points" | "wallet" | "credit";
+export type LedgerReason =
+  | "earn" | "redeem" | "spend" | "topup" | "adjust" | "void_earn" | "void_redeem" | "void_spend"
+  | "credit_sale" | "repayment" | "writeoff" | "void_credit_sale";
 
 export interface LedgerEntry {
   id: string;
@@ -51,6 +59,8 @@ export interface LedgerEntry {
   receiptNo: string | null;
   userId: string | null;
   note: string | null;
+  /** How a repayment was made. */
+  method: "cash" | "card" | null;
   createdAt: string;
 }
 
@@ -119,15 +129,16 @@ interface NewEntry {
   saleId?: string | null;
   userId?: string | null;
   note?: string | null;
+  method?: "cash" | "card" | null;
 }
 
 /** Add one row to the ledger. The only way a balance changes. Callers run it inside their own transaction. */
 export function postLedger(db: Db, e: NewEntry): void {
   if (!Number.isInteger(e.delta) || e.delta === 0) throw new Error("A ledger entry must be a whole number that is not zero");
   db.prepare(
-    `INSERT INTO customer_ledger (id, customer_id, account, delta, reason, sale_id, user_id, note, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(randomUUID(), e.customerId, e.account, e.delta, e.reason, e.saleId ?? null, e.userId ?? null, e.note ?? null, new Date().toISOString());
+    `INSERT INTO customer_ledger (id, customer_id, account, delta, reason, sale_id, user_id, note, created_at, method)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(randomUUID(), e.customerId, e.account, e.delta, e.reason, e.saleId ?? null, e.userId ?? null, e.note ?? null, new Date().toISOString(), e.method ?? null);
 }
 
 /** Undo what a sale did to its customer: every ledger row of the sale gets an equal and opposite row. */
@@ -135,9 +146,9 @@ export function reverseSaleLedger(db: Db, saleId: string, userId?: string | null
   const rows = db
     .prepare(
       `SELECT customer_id AS customerId, account, delta, reason FROM customer_ledger
-        WHERE sale_id = ? AND reason IN ('earn', 'redeem', 'spend') ORDER BY rowid`,
+        WHERE sale_id = ? AND reason IN ('earn', 'redeem', 'spend', 'credit_sale') ORDER BY rowid`,
     )
-    .all(saleId) as { customerId: string; account: LedgerAccount; delta: number; reason: "earn" | "redeem" | "spend" }[];
+    .all(saleId) as { customerId: string; account: LedgerAccount; delta: number; reason: "earn" | "redeem" | "spend" | "credit_sale" }[];
   for (const r of rows) {
     postLedger(db, {
       customerId: r.customerId,
@@ -162,7 +173,75 @@ export function normalizePhone(raw: string | null | undefined): string | null {
 
 const clean = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);
 
-const summaryColumns = "id, name, phone, address, points, wallet_minor AS walletMinor";
+/** The owed amount is worked out from the ledger every time; it is never a stored number. */
+const owedSql = "(SELECT COALESCE(SUM(delta), 0) FROM customer_ledger WHERE customer_id = customers.id AND account = 'credit')";
+const summaryColumns = `id, name, phone, address, points, wallet_minor AS walletMinor, ${owedSql} AS owedMinor, credit_limit_minor AS creditLimitMinor`;
+
+/** What a customer owes on account right now: the sum of their credit ledger rows. */
+export function creditBalance(db: Db, customerId: string): number {
+  return (
+    db.prepare("SELECT COALESCE(SUM(delta), 0) AS n FROM customer_ledger WHERE customer_id = ? AND account = 'credit'").get(customerId) as {
+      n: number;
+    }
+  ).n;
+}
+
+/** Whole amount as plain text for messages: 12345 -> "123.45". */
+export const plainAmount = (minor: number) => (minor / 100).toFixed(2);
+
+/**
+ * Refuse a sale on account that would take the customer over their limit. A customer with no limit is
+ * never refused. Throws a plain message that says how much can still be put on account.
+ */
+export function assertWithinCreditLimit(db: Db, customerId: string, addMinor: number): void {
+  const row = db.prepare("SELECT name, credit_limit_minor AS lim FROM customers WHERE id = ?").get(customerId) as
+    | { name: string; lim: number | null }
+    | undefined;
+  if (!row) throw new Error("Customer not found");
+  if (row.lim === null) return;
+  const owed = creditBalance(db, customerId);
+  if (owed + addMinor <= row.lim) return;
+  const room = Math.max(0, row.lim - owed);
+  throw new Error(
+    room === 0
+      ? `${row.name} owes ${plainAmount(owed)} and is already at their limit of ${plainAmount(row.lim)}. They need to pay something back first.`
+      : `${row.name} owes ${plainAmount(owed)}, and putting ${plainAmount(addMinor)} more on account would go over their limit of ${plainAmount(row.lim)}. The most you can put on account is ${plainAmount(room)}.`,
+  );
+}
+
+/** The few fields the till needs about a customer, with what they owe worked out from the ledger. */
+export function customerSummary(db: Db, id: string): CustomerSummary | null {
+  return (db.prepare(`SELECT ${summaryColumns} FROM customers WHERE id = ?`).get(id) as CustomerSummary | undefined) ?? null;
+}
+
+export interface StatementRow {
+  id: string;
+  at: string;
+  kind: "sale" | "repayment" | "writeoff" | "void";
+  /** Positive adds to what they owe, negative reduces it. */
+  deltaMinor: number;
+  /** What they owed after this row. */
+  balanceMinor: number;
+  receiptNo: string | null;
+  method: "cash" | "card" | null;
+  note: string | null;
+}
+
+export interface Statement {
+  customer: Customer;
+  /** Oldest first, each with the running balance. */
+  rows: StatementRow[];
+  owedMinor: number;
+}
+
+export interface Debtor {
+  id: string;
+  name: string;
+  phone: string | null;
+  owedMinor: number;
+  creditLimitMinor: number | null;
+  lastActivity: string;
+}
 
 export class CustomerService {
   constructor(private readonly db: Db) {}
@@ -198,7 +277,7 @@ export class CustomerService {
   }
 
   get(id: string): Customer | undefined {
-    const r = this.db.prepare("SELECT * FROM customers WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    const r = this.db.prepare(`SELECT *, ${owedSql} AS owed FROM customers WHERE id = ?`).get(id) as Record<string, unknown> | undefined;
     return r ? toCustomer(r) : undefined;
   }
 
@@ -214,13 +293,13 @@ export class CustomerService {
     const q = (query ?? "").trim();
     const cap = Math.min(Math.max(Math.trunc(limit) || 20, 1), 200);
     if (!q) {
-      return (this.db.prepare("SELECT * FROM customers ORDER BY created_at DESC, rowid DESC LIMIT ?").all(cap) as Record<string, unknown>[]).map(toCustomer);
+      return (this.db.prepare(`SELECT *, ${owedSql} AS owed FROM customers ORDER BY created_at DESC, rowid DESC LIMIT ?`).all(cap) as Record<string, unknown>[]).map(toCustomer);
     }
     const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
     const digits = q.replace(/\D/g, "");
     const rows = this.db
       .prepare(
-        `SELECT * FROM customers
+        `SELECT *, ${owedSql} AS owed FROM customers
           WHERE name LIKE ? ESCAPE '\\'
              OR (? <> '' AND REPLACE(COALESCE(phone, ''), '+', '') LIKE ?)
           ORDER BY CASE WHEN phone = ? THEN 0 ELSE 1 END, name COLLATE NOCASE
@@ -259,7 +338,7 @@ export class CustomerService {
     const rows = this.db
       .prepare(
         `SELECT l.id, l.customer_id AS customerId, l.account, l.delta, l.reason, l.sale_id AS saleId,
-                s.receipt_no AS receiptNo, l.user_id AS userId, l.note, l.created_at AS createdAt
+                s.receipt_no AS receiptNo, l.user_id AS userId, l.note, l.method, l.created_at AS createdAt
            FROM customer_ledger l LEFT JOIN sales s ON s.id = l.sale_id
           WHERE l.customer_id = ? ORDER BY l.created_at DESC, l.rowid DESC LIMIT ?`,
       )
@@ -333,6 +412,80 @@ export class CustomerService {
     return this.mustGet(id);
   }
 
+  // ---- Khata: buying on account ----------------------------------------------------------------
+
+  /** Set or clear (null) the most a customer may owe. A limit below what they already owe is allowed: it only stops new credit. */
+  setCreditLimit(id: string, limitMinor: number | null): Customer {
+    this.mustGet(id);
+    if (limitMinor !== null && (!Number.isInteger(limitMinor) || limitMinor < 0)) {
+      throw new Error("The credit limit must be an amount of 0 or more, or empty for no limit");
+    }
+    this.db.prepare("UPDATE customers SET credit_limit_minor = ? WHERE id = ?").run(limitMinor, id);
+    return this.mustGet(id);
+  }
+
+  /**
+   * Record money the customer paid back. The caller takes the money (cash goes into the open shift's drawer
+   * record in the handler). A repayment cannot be more than they owe: extra money belongs in their wallet.
+   */
+  repay(id: string, amountMinor: number, method: "cash" | "card", note?: string | null, userId?: string | null): Customer {
+    const c = this.mustGet(id);
+    if (!Number.isInteger(amountMinor) || amountMinor <= 0) throw new Error("The amount paid back must be above 0");
+    if (method !== "cash" && method !== "card") throw new Error("Choose cash or card for the repayment");
+    if (c.owedMinor <= 0) throw new Error(`${c.name} does not owe anything`);
+    if (amountMinor > c.owedMinor) {
+      throw new Error(`${c.name} owes ${plainAmount(c.owedMinor)}, so ${plainAmount(amountMinor)} is too much. For extra money, top up their wallet instead.`);
+    }
+    postLedger(this.db, { customerId: id, account: "credit", delta: -amountMinor, reason: "repayment", method, note: clean(note), userId });
+    return this.mustGet(id);
+  }
+
+  /** Forgive some or all of what a customer owes (default: all). Needs a reason, which stays in their statement. */
+  writeOff(id: string, note: string, amountMinor?: number | null, userId?: string | null): Customer {
+    const c = this.mustGet(id);
+    if (c.owedMinor <= 0) throw new Error(`${c.name} does not owe anything`);
+    if (!note?.trim()) throw new Error("Please give a reason for writing it off");
+    const amount = amountMinor ?? c.owedMinor;
+    if (!Number.isInteger(amount) || amount <= 0) throw new Error("The amount to write off must be above 0");
+    if (amount > c.owedMinor) throw new Error(`${c.name} only owes ${plainAmount(c.owedMinor)}`);
+    postLedger(this.db, { customerId: id, account: "credit", delta: -amount, reason: "writeoff", note: note.trim(), userId });
+    return this.mustGet(id);
+  }
+
+  /** Everyone who owes money, the largest amount first. */
+  owing(): Debtor[] {
+    return this.db
+      .prepare(
+        `SELECT c.id, c.name, c.phone, c.credit_limit_minor AS creditLimitMinor, SUM(l.delta) AS owedMinor, MAX(l.created_at) AS lastActivity
+           FROM customers c JOIN customer_ledger l ON l.customer_id = c.id AND l.account = 'credit'
+          GROUP BY c.id HAVING SUM(l.delta) > 0
+          ORDER BY owedMinor DESC, c.name COLLATE NOCASE`,
+      )
+      .all() as Debtor[];
+  }
+
+  /** Sales on account and repayments, oldest first, each with what the customer owed afterwards. */
+  statement(id: string): Statement {
+    const customer = this.mustGet(id);
+    const rows = this.db
+      .prepare(
+        `SELECT l.id, l.created_at AS at, l.reason, l.delta, s.receipt_no AS receiptNo, l.method, l.note
+           FROM customer_ledger l LEFT JOIN sales s ON s.id = l.sale_id
+          WHERE l.customer_id = ? AND l.account = 'credit' ORDER BY l.created_at, l.rowid`,
+      )
+      .all(id) as { id: string; at: string; reason: LedgerReason; delta: number; receiptNo: string | null; method: "cash" | "card" | null; note: string | null }[];
+    let running = 0;
+    const kind = { credit_sale: "sale", repayment: "repayment", writeoff: "writeoff", void_credit_sale: "void" } as const;
+    return {
+      customer,
+      owedMinor: customer.owedMinor,
+      rows: rows.map((r): StatementRow => {
+        running += r.delta;
+        return { id: r.id, at: r.at, kind: kind[r.reason as keyof typeof kind], deltaMinor: r.delta, balanceMinor: running, receiptNo: r.receiptNo, method: r.method, note: r.note };
+      }),
+    };
+  }
+
   private checkPhone(raw: string | null | undefined): string | null {
     const trimmed = clean(raw);
     if (!trimmed) return null;
@@ -363,6 +516,8 @@ function toCustomer(r: Record<string, unknown>): Customer {
     notes: (r.notes as string | null) ?? null,
     points: r.points as number,
     walletMinor: r.wallet_minor as number,
+    owedMinor: (r.owed as number | undefined) ?? 0,
+    creditLimitMinor: (r.credit_limit_minor as number | null | undefined) ?? null,
     createdAt: r.created_at as string,
   };
 }

@@ -208,8 +208,8 @@ describe("wallet", () => {
     const s = sales.checkout({ lines: [{ productId: tea, qty: 1 }], payments: [], customerId: c.id, walletMinor: 5_000 });
     expect(s.payments).toMatchObject([{ method: "other", label: "wallet", amountMinor: 5_000 }]);
     expect(customers.get(c.id)!.walletMinor).toBe(5_000);
-    expect(() => sales.checkout({ lines: [{ productId: burger, qty: 2 }], payments: [], customerId: c.id, walletMinor: 5_001 })).toThrow(/wallet has 5000/);
-    expect(() => sales.checkout({ lines: [{ productId: tea, qty: 1 }], payments: [], customerId: c.id, walletMinor: 5_001 })).toThrow(/wallet has 5000|more than the bill/);
+    expect(() => sales.checkout({ lines: [{ productId: burger, qty: 2 }], payments: [], customerId: c.id, walletMinor: 5_001 })).toThrow(/wallet has 50.00, not 50.01/);
+    expect(() => sales.checkout({ lines: [{ productId: tea, qty: 1 }], payments: [], customerId: c.id, walletMinor: 5_001 })).toThrow(/wallet has 50.00|more than the bill/);
     expect(() => customers.adjustWallet(c.id, -5_001, "Refund")).toThrow(/does not have that much/);
     expect(customers.adjustWallet(c.id, -1_000, "Refund").walletMinor).toBe(4_000);
     expect(() => customers.adjustWallet(c.id, 100, " ")).toThrow(/reason/);

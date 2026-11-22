@@ -342,7 +342,7 @@ describe("delivery fee", () => {
     const { zinger } = shop();
     const o = delivery(15_000);
     orders.addItem(o.id, { productId: zinger.id, qty: 1 });
-    expect(() => orders.pay(o.id, { payments: cash(45_000) })).toThrow(/short by 15000/);
+    expect(() => orders.pay(o.id, { payments: cash(45_000) })).toThrow(/short by 150.00/);
     expect(orders.get(o.id)!.status).toBe("open");
   });
 

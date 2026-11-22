@@ -16,7 +16,7 @@ We could not find reliable public information about **LogicPOS**, so it is left 
 | Recipes and real food cost per dish | Yes | Not listed | Not listed |
 | Staff attendance and payroll | Yes | Not listed | Staff activity reports |
 | Profit and loss with "where the money went" | Yes (owner only) | Accounting and reports | Profit reports |
-| Customers and loyalty | Yes: phone search, points and a wallet (customer credit/khata is next) | Customer groups, rewards, coupons | Accounts and balances |
+| Customers and loyalty | Yes: phone search, points, a wallet and khata (sell on account, credit limits, repayments, printable statements) | Customer groups, rewards, coupons | Accounts and balances |
 | Thermal printers, cash drawer, scales | Receipts for 58/80 mm paper now; direct thermal printing and drawer planned | Barcode and scale support | Documented hardware paths |
 | Tax invoices (GST and similar) | Not yet. Not approved for FBR, PRA or SRB | Not listed | GST invoices |
 | Multiple branches | Planned | Paid MultiStore module | Yes (cloud sync is paid) |

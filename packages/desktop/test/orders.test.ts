@@ -111,7 +111,7 @@ describe("paying with several payments", () => {
     await api.openShift(0);
     await expect(
       api.checkout({ lines: [{ productId: meal.id, qty: 1 }], payments: [{ method: "cash", amountMinor: 300 }, { method: "card", amountMinor: 100 }] }),
-    ).rejects.toThrow(/short by 100/);
+    ).rejects.toThrow(/short by 1\.00/);
     expect(await api.recentSales()).toHaveLength(0);
     expect(await cashIn()).toBe(0);
   });
@@ -145,7 +145,7 @@ describe("paying with several payments", () => {
     await api.addOrderItem(o.id, { productId: meal.id, qty: 1 });
     await expect(
       api.payOrder(o.id, [{ method: "cash", amountMinor: 100 }, { method: "card", amountMinor: 100 }]),
-    ).rejects.toThrow(/short by 300/);
+    ).rejects.toThrow(/short by 3\.00/);
     expect(await api.openOrders()).toHaveLength(1);
     const { sale } = await api.payOrder(o.id, [
       { method: "cash", amountMinor: 100 },
