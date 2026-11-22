@@ -235,6 +235,12 @@ export interface TillbaseApi {
   clearBackupFolder(): Promise<BackupStatus>;
   restoreBackup(name: string, where: BackupWhere): Promise<void>;
 
+  // Updates screen (owner only)
+  updateState(): Promise<UpdateInfo>;
+  updateCheck(): Promise<UpdateInfo>;
+  updateSetEnabled(on: boolean): Promise<UpdateInfo>;
+  updateInstall(): Promise<void>;
+
   // Reports and settings
   salesSummary(from: string, to: string): Promise<SalesSummary>;
   updateSettings(patch: Partial<ShopSettings>): Promise<ShopSettings>;
@@ -256,6 +262,20 @@ export interface TillbaseApi {
 }
 
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+/** What the Updates screen shows. Same shape as UpdateState in electron/updater.ts. */
+export interface UpdateInfo {
+  enabled: boolean;
+  mode: "automatic" | "manual";
+  status: "off" | "idle" | "checking" | "downloading" | "ready" | "available" | "error" | "unavailable";
+  currentVersion: string;
+  newVersion?: string;
+  percent?: number;
+  lastChecked?: number;
+  message: string;
+  downloadUrl?: string;
+  busy: boolean;
+}
 
 /** The IPC channel names, one per API method. */
 export const channels: (keyof TillbaseApi)[] = [
@@ -294,6 +314,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "payrollPreview","runPayroll","payPayslip","payslips",
   "profitAndLoss","backupNow",
   "backupStatus","chooseBackupFolder","clearBackupFolder","restoreBackup",
+  "updateState","updateCheck","updateSetEnabled","updateInstall",
   "exportAccounting",
   "salesSummary",
   "updateSettings",

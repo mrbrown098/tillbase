@@ -21,6 +21,7 @@
   "dependencies": {
     "@tillbase/core": "*",
     "better-sqlite3": "^12.0.0",
+    "electron-updater": "^6.8.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

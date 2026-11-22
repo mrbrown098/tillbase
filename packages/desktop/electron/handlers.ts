@@ -35,6 +35,7 @@ import type {
   SessionInfo,
   ShiftSummaryView,
   TillbaseApi,
+  UpdateInfo,
 } from "../shared/api.js";
 
 /**
@@ -56,6 +57,13 @@ export function createHandlers(
     /** Called after a restore has swapped the data in: the app must restart. */
     afterRestore?: () => void;
     afterShiftClose?: () => void;
+    /** Automatic updates (see electron/updater.ts). */
+    updates?: {
+      state: () => UpdateInfo;
+      check: () => Promise<UpdateInfo>;
+      setEnabled: (on: boolean) => UpdateInfo;
+      install: () => void;
+    };
     /** Native file dialogs, supplied by the Electron main process. Each returns null if the person cancels. */
     files?: {
       openCsv: () => Promise<ProductCsvFile | null>;
@@ -86,6 +94,11 @@ export function createHandlers(
   const needBackups = (): BackupManager => {
     if (!hooks.backups) throw new Error("Backups are not available here");
     return hooks.backups;
+  };
+
+  const needUpdates = () => {
+    if (!hooks.updates) throw new Error("Updates are not available here");
+    return hooks.updates;
   };
 
   const publicUser = (u: User) => ({ id: u.id, name: u.name, role: u.role });
@@ -626,6 +639,22 @@ export function createHandlers(
       // Built first so a bad date range is reported before any folder window opens.
       const files = accounting.all(from, to).map((f) => ({ name: f.name, text: f.csv }));
       return hooks.files.saveFiles(files);
+    },
+    async updateState() {
+      authorize("settings.manage");
+      return needUpdates().state();
+    },
+    async updateCheck() {
+      authorize("settings.manage");
+      return needUpdates().check();
+    },
+    async updateSetEnabled(on) {
+      authorize("settings.manage");
+      return needUpdates().setEnabled(on);
+    },
+    async updateInstall() {
+      authorize("settings.manage");
+      needUpdates().install();
     },
     async backupNow() {
       authorize("settings.manage");

@@ -5,6 +5,7 @@ import { BackupManager, openDatabase } from "@tillbase/core";
 import { channels, type IpcResult, type TillbaseApi } from "../shared/api.js";
 import { createFileDialogs } from "./files.js";
 import { createHandlers } from "./handlers.js";
+import { startUpdater } from "./updater.js";
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
@@ -76,7 +77,8 @@ void app.whenReady().then(() => {
     app.relaunch();
     app.exit(0);
   };
-  registerIpc(createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, afterShiftClose: quietBackup, files }));
+  const updates = startUpdater(db);
+  registerIpc(createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, afterShiftClose: quietBackup, files, updates }));
   createWindow();
 
   app.on("activate", () => {

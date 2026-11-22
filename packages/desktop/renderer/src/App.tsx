@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Permission } from "@tillbase/core";
 import { api } from "./api";
 import { Backups } from "./Backups";
+import { Updates } from "./Updates";
 import { Checkout } from "./Checkout";
 import { useApp } from "./context";
 import { Costs } from "./Costs";
@@ -33,6 +34,7 @@ const tabs: { id: string; label: string; needs: Permission }[] = [
   { id: "staff", label: "Staff", needs: "users.manage" },
   { id: "settings", label: "Settings", needs: "settings.manage" },
   { id: "backups", label: "Backups", needs: "settings.manage" },
+  { id: "updates", label: "Updates", needs: "settings.manage" },
 ];
 
 /** Sign out after this long without a click or key press. */
@@ -125,6 +127,7 @@ function Shell() {
         {active === "staff" && <Staff />}
         {active === "settings" && <Settings />}
         {active === "backups" && <Backups />}
+        {active === "updates" && <Updates />}
       </main>
       {changingPin && <ChangeOwnPin onClose={() => setChangingPin(false)} />}
     </div>
