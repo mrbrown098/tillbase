@@ -38,7 +38,7 @@ export { ShiftService } from "./shifts.js";
 export type { Shift, ShiftSummary } from "./shifts.js";
 export { SettingsService, defaultSettings, footerWithCredit, MAX_LOGO_BYTES } from "./settings.js";
 export type { ShopSettings } from "./settings.js";
-export { formatReceipt, formatStatement } from "./receipt.js";
+export { formatReceipt, formatStatement, formatKitchenTicket } from "./receipt.js";
 export type { ReceiptOptions } from "./receipt.js";
 export { RecipeService } from "./recipes.js";
 export type { Recipe, RecipeLine } from "./recipes.js";
@@ -78,3 +78,20 @@ export type {
 } from "./purchase-orders.js";
 export { creditBalance } from "./customers.js";
 export type { Debtor, Statement, StatementRow } from "./customers.js";
+export {
+  PAPER_DOTS,
+  PAPER_CHARS,
+  cmd as escposCommands,
+  paperForWidth,
+  encodeText,
+  rasterFromRgba,
+  rasterCommands,
+  receiptJob,
+  statementJob,
+  kitchenTicketJob,
+  reportJob,
+  drawerKickJob,
+} from "./escpos.js";
+export type { PaperMm, Raster, Rgba, JobOptions } from "./escpos.js";
+export { PrinterConfigService, defaultPrinterConfig } from "./printer.js";
+export type { PrinterConfig } from "./printer.js";

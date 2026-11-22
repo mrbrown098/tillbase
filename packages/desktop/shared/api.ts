@@ -16,6 +16,7 @@ import type {
   LoyaltyConfig,
   OrderInput,
   PaymentInput,
+  PrinterConfig,
   CheckoutInput,
   Employee,
   EmployeeInput,
@@ -280,7 +281,26 @@ export interface TillbaseApi {
   saveCsvFile(suggestedName: string, text: string): Promise<string | null>;
   previewProductCsv(text: string, options?: ProductCsvOptions): Promise<ProductCsvReport>;
   importProductCsv(text: string, options?: ProductCsvOptions): Promise<ProductCsvReport>;
+
+  // Direct receipt printing. A print never throws for printer trouble: it answers with a PrintResult, so a sale is never blocked.
+  /** Where receipts go (any signed-in user can read it, so screens know whether to print by themselves). */
+  getPrinter(): Promise<PrinterConfig>;
+  setPrinter(config: Partial<PrinterConfig>): Promise<PrinterConfig>;
+  /** Print a sale's receipt (with the shop logo). Opens the cash drawer when the printer is set to and the sale took cash. */
+  printReceipt(saleId: string): Promise<PrintResult>;
+  printKitchenTicket(ticket: KitchenTicket): Promise<PrintResult>;
+  printStatement(customerId: string): Promise<PrintResult>;
+  /** Settings: print a short test page (optionally opening the drawer too). */
+  printTestPage(openDrawer?: boolean): Promise<PrintResult>;
+  /** Open the cash drawer without a sale. Managers only, because it is a "no sale" drawer opening. */
+  openCashDrawer(): Promise<PrintResult>;
 }
+
+/**
+ * What happened when something was sent to the receipt printer. `no_printer`: none is set up, so the screen uses
+ * the system print window. `failed`: one is set up but could not be used; `message` says why, in plain words.
+ */
+export type PrintResult = { status: "printed" } | { status: "no_printer" } | { status: "failed"; message: string };
 
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -332,4 +352,5 @@ export const channels: (keyof TillbaseApi)[] = [
   "resetPin",
   "changeOwnPin",
   "chooseProductCsv","productCsvTemplate","exportProductCsv","saveCsvFile","previewProductCsv","importProductCsv",
+  "getPrinter","setPrinter","printReceipt","printKitchenTicket","printStatement","printTestPage","openCashDrawer",
 ];
