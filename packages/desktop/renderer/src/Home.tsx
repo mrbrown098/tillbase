@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import type { LowStockItem, Payables, ProfitAndLoss, Sale, SalesSummary } from "@tillbase/core";
 import { api } from "./api";
+import { AdBanner } from "./AdBanner";
 import { useApp } from "./context";
+import { UpdateNotice } from "./UpdateNotice";
 import { isoDay, todayRange } from "./format";
 
 interface Props {
@@ -65,6 +67,8 @@ export function Home({ go }: Props) {
           </button>
         )}
       </div>
+
+      <UpdateNotice />
 
       {error && (
         <p className="form-error" role="alert">
@@ -167,6 +171,7 @@ export function Home({ go }: Props) {
           )}
         </section>
       </div>
+      <AdBanner />
     </div>
   );
 }

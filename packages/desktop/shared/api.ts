@@ -1,3 +1,5 @@
+import type { AdView } from "../electron/ads.js";
+import type { UpdateInfo } from "../electron/updates.js";
 import type {
   BackupStatus,
   BackupWhere,
@@ -244,6 +246,13 @@ export interface TillbaseApi {
   /** Save the five accountant CSV files for a date range into a folder the person picks. Null if they cancel. */
   exportAccounting(from: string, to: string): Promise<{ folder: string; names: string[] } | null>;
   backupNow(): Promise<string>;
+
+  // Sponsor line and "is there a newer Tillbase?". Neither sends anything about the shop.
+  sponsorBanner(): Promise<AdView | null>;
+  openSponsor(id: string): Promise<void>;
+  appVersion(): Promise<string>;
+  checkForUpdate(force?: boolean): Promise<UpdateInfo | null>;
+  openDownloadPage(): Promise<void>;
   // Backups screen (owner only)
   backupStatus(): Promise<BackupStatus>;
   chooseBackupFolder(): Promise<BackupStatus | null>;
@@ -328,6 +337,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "listEmployees","createEmployee","updateEmployee","giveAdvance",
   "payrollPreview","runPayroll","payPayslip","payslips",
   "profitAndLoss","backupNow",
+  "sponsorBanner","openSponsor","appVersion","checkForUpdate","openDownloadPage",
   "backupStatus","chooseBackupFolder","clearBackupFolder","restoreBackup",
   "exportAccounting",
   "salesSummary",
