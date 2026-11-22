@@ -101,8 +101,9 @@ try {
 
   await page.getByRole("button", { name: new RegExp(OWNER_NAME) }).click();
   for (const digit of OWNER_PIN) await page.getByRole("button", { name: digit, exact: true }).click();
-  await page.getByRole("button", { name: "Sign in" }).click();
+  // The sign-in screen signs in by itself on the last digit of a known PIN length; press the button only if that did not happen.
   const nav = page.locator('nav[aria-label="Main"]');
+  await nav.waitFor({ timeout: 4000 }).catch(() => page.getByRole("button", { name: "Sign in" }).click());
   await nav.waitFor();
   await nav.getByRole("button", { name: "Supplier orders" }).click();
   await page.getByRole("heading", { name: "Supplier orders" }).waitFor();
