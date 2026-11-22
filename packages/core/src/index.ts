@@ -36,7 +36,7 @@ export { can, permissionsOf, roles } from "./permissions.js";
 export type { Permission, Role } from "./permissions.js";
 export { ShiftService } from "./shifts.js";
 export type { Shift, ShiftSummary } from "./shifts.js";
-export { SettingsService, defaultSettings } from "./settings.js";
+export { SettingsService, defaultSettings, footerWithCredit, MAX_LOGO_BYTES } from "./settings.js";
 export type { ShopSettings } from "./settings.js";
 export { formatReceipt, formatStatement } from "./receipt.js";
 export type { ReceiptOptions } from "./receipt.js";

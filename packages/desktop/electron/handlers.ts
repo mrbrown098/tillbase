@@ -18,6 +18,7 @@ import {
   ShiftService,
   UserService,
   can,
+  footerWithCredit,
   formatReceipt,
   formatStatement,
   permissionsOf,
@@ -89,7 +90,7 @@ export function createHandlers(
     return hooks.backups;
   };
 
-  const publicUser = (u: User) => ({ id: u.id, name: u.name, role: u.role });
+  const publicUser = (u: User) => ({ id: u.id, name: u.name, role: u.role, pinLength: u.pinLength });
 
   /** The signed-in user, or an error. Re-reads the account so a deactivated or demoted user loses access at once. */
   const authorize = (permission?: Permission): User => {
@@ -134,7 +135,7 @@ export function createHandlers(
       currency: s.currency,
       locale: s.locale,
       width: s.receiptWidth,
-      footer: s.receiptFooter,
+      footer: footerWithCredit(s),
     });
   };
 
@@ -477,7 +478,7 @@ export function createHandlers(
         currency: s.currency,
         locale: s.locale,
         width: width === 48 ? 48 : 32,
-        footer: s.receiptFooter,
+        footer: footerWithCredit(s),
       });
     },
     async repayCustomer(id, amountMinor, method, note) {

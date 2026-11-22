@@ -7,7 +7,7 @@ import { useApp } from "./context";
 import { CustomerPicker } from "./CustomerPicker";
 import { maxPoints, planPayment, pointsEarned, type BillLine } from "./loyalty";
 import { minorToInput, parseMoney } from "./format";
-import { Modal, ReceiptView } from "./Modal";
+import { Modal, ReceiptView, PrintArea } from "./Modal";
 import { methodLabel, summarizePayments } from "./payments";
 
 interface Line {
@@ -379,7 +379,7 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
               New sale
             </button>
           </div>
-          <pre id="print-area">{done.receipt}</pre>
+          <PrintArea text={done.receipt} />
         </Modal>
       )}
     </div>
