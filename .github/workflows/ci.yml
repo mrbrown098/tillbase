@@ -4,6 +4,8 @@ name: CI
 #   test       typecheck and unit tests on Linux, Windows and macOS
 #   smoke      builds the app and launches it for real on Linux, Windows and macOS
 #   installers builds the installers on every OS and tests the INSTALLED app (see installers.yml)
+#   lockfile   package-lock.json must not fetch anything over git
+#   fresh-clone what a new contributor does on a new machine, with the NEWEST npm
 on:
   pull_request:
   push:
@@ -17,6 +19,71 @@ permissions:
   contents: read
 
 jobs:
+  lockfile:
+    name: Lockfile has no git dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # npm 11 refuses git dependencies (EALLOWGIT), and a git+ssh URL fails for anyone without a GitHub SSH key.
+      - run: node scripts/check-lockfile.mjs
+
+  # A real person cloning the repository on a new machine hit two bugs that every other job here missed,
+  # because those jobs run with a warm cache and a pinned npm: npm 11 refusing a git dependency, and npm
+  # 11.2x blocking install scripts so Electron never downloaded. This job is that person: a clean checkout,
+  # no dependency cache, the newest npm, then the same steps README.md tells them to run.
+  fresh-clone:
+    name: Fresh clone (${{ matrix.os }}, Node ${{ matrix.node }}, newest npm)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          # No `cache: npm`: a fresh machine has nothing cached.
+      - name: Install the newest npm
+        run: npm install -g npm@latest
+      - name: Show the versions in use
+        shell: bash
+        run: |
+          echo "node $(node --version)"
+          echo "npm  $(npm --version)"
+          npm config get ignore-scripts
+      - name: Lockfile has no git dependencies
+        run: node scripts/check-lockfile.mjs
+      - run: npm ci
+      - name: Electron was downloaded (npm may have blocked its install script)
+        run: node scripts/check-electron-installed.mjs
+      - run: npm run build -w @tillbase/core
+      - run: npm run rebuild -w @tillbase/desktop
+      - run: npm run build -w @tillbase/desktop
+      - name: Install a virtual display (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      - name: App smoke test (Linux, virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke.mjs --dev --shots smoke-output
+      - name: App smoke test
+        if: runner.os != 'Linux'
+        run: node scripts/smoke.mjs --dev --shots smoke-output
+      - name: Save screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-clone-screenshots-${{ runner.os }}-node${{ matrix.node }}
+          path: smoke-output/
+          if-no-files-found: warn
+          retention-days: 7
+
   test:
     name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}

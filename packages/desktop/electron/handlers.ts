@@ -19,7 +19,9 @@ import {
   ShiftService,
   UserService,
   can,
+  footerWithCredit,
   formatReceipt,
+  formatStatement,
   permissionsOf,
   type Db,
   type ImportResult,
@@ -90,7 +92,7 @@ export function createHandlers(
     return hooks.backups;
   };
 
-  const publicUser = (u: User) => ({ id: u.id, name: u.name, role: u.role });
+  const publicUser = (u: User) => ({ id: u.id, name: u.name, role: u.role, pinLength: u.pinLength });
 
   /** The signed-in user, or an error. Re-reads the account so a deactivated or demoted user loses access at once. */
   const authorize = (permission?: Permission): User => {
@@ -135,7 +137,7 @@ export function createHandlers(
       currency: s.currency,
       locale: s.locale,
       width: s.receiptWidth,
-      footer: s.receiptFooter,
+      footer: footerWithCredit(s),
     });
   };
 
@@ -232,6 +234,7 @@ export function createHandlers(
     },
     async checkout(input): Promise<CheckoutResult> {
       const user = authorize("sell");
+      if ((input.onAccountMinor ?? 0) > 0) authorize("khata.use");
       if (input.lines.some((l) => (l.discountMinor ?? 0) > 0 || l.unitPriceMinor !== undefined)) {
         authorize("discount");
       }
@@ -406,10 +409,11 @@ export function createHandlers(
     },
     async payOrder(orderId, payments, loyalty) {
       const user = authorize("sell");
+      if ((loyalty?.onAccountMinor ?? 0) > 0) authorize("khata.use");
       const shift = openShiftOrThrow();
       const sale = orders.pay(orderId, {
         payments, shiftId: shift.id, userId: user.id, cashier: user.name,
-        redeemPoints: loyalty?.redeemPoints, walletMinor: loyalty?.walletMinor,
+        redeemPoints: loyalty?.redeemPoints, walletMinor: loyalty?.walletMinor, onAccountMinor: loyalty?.onAccountMinor,
       });
       return { sale, receipt: receipt(sale) };
     },
@@ -458,6 +462,45 @@ export function createHandlers(
         if (shift) shifts.addCashMovement(shift.id, user.id, amountMinor, `Wallet top-up for ${c.name}`);
         return c;
       })();
+    },
+    // ---- Khata: customers buying on account ---------------------------------------
+    async owingCustomers() {
+      authorize("khata.use");
+      return customers.owing();
+    },
+    async customerStatement(id) {
+      authorize("khata.use");
+      return customers.statement(id);
+    },
+    async customerStatementText(id, width) {
+      authorize("khata.use");
+      const s = settings.get();
+      return formatStatement(customers.statement(id), {
+        storeName: s.storeName,
+        currency: s.currency,
+        locale: s.locale,
+        width: width === 48 ? 48 : 32,
+        footer: footerWithCredit(s),
+      });
+    },
+    async repayCustomer(id, amountMinor, method, note) {
+      const user = authorize("khata.use");
+      if (method !== "cash" && method !== "card") throw new Error("Choose cash or card for the repayment");
+      // Cash paid back goes into the drawer, so it is recorded on the shift. Do both or neither.
+      const shift = method === "cash" ? openShiftOrThrow() : null;
+      return db.transaction(() => {
+        const c = customers.repay(id, amountMinor, method, note, user.id);
+        if (shift) shifts.addCashMovement(shift.id, user.id, amountMinor, `Khata repayment from ${c.name}`);
+        return c;
+      })();
+    },
+    async setCreditLimit(id, limitMinor) {
+      authorize("khata.manage");
+      return customers.setCreditLimit(id, limitMinor);
+    },
+    async writeOffCustomer(id, note, amountMinor) {
+      const user = authorize("khata.manage");
+      return customers.writeOff(id, note, amountMinor ?? null, user.id);
     },
     async getLoyalty() {
       authorize("customers.use");

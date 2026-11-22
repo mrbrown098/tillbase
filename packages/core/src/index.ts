@@ -36,9 +36,9 @@ export { can, permissionsOf, roles } from "./permissions.js";
 export type { Permission, Role } from "./permissions.js";
 export { ShiftService } from "./shifts.js";
 export type { Shift, ShiftSummary } from "./shifts.js";
-export { SettingsService, defaultSettings } from "./settings.js";
+export { SettingsService, defaultSettings, footerWithCredit, MAX_LOGO_BYTES } from "./settings.js";
 export type { ShopSettings } from "./settings.js";
-export { formatReceipt } from "./receipt.js";
+export { formatReceipt, formatStatement } from "./receipt.js";
 export type { ReceiptOptions } from "./receipt.js";
 export { RecipeService } from "./recipes.js";
 export type { Recipe, RecipeLine } from "./recipes.js";
@@ -76,3 +76,5 @@ export type {
   PurchaseOrder, PurchaseOrderInput, PurchaseOrderLine, PurchaseOrderLineInput, PurchaseOrderReceipt,
   PurchaseOrderStatus, ReceiveInput, StatementEntry, SupplierStatement,
 } from "./purchase-orders.js";
+export { creditBalance } from "./customers.js";
+export type { Debtor, Statement, StatementRow } from "./customers.js";

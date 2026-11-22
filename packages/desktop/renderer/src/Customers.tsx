@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Customer, CustomerHistory, LedgerEntry, LoyaltyConfig } from "@tillbase/core";
+import type { Customer, CustomerHistory, Debtor, LedgerEntry, LoyaltyConfig, Statement } from "@tillbase/core";
 import { api } from "./api";
 import { useApp } from "./context";
 import { formatDateTime, minorToInput, parseMoney } from "./format";
-import { Modal } from "./Modal";
+import { Modal, PrintArea } from "./Modal";
 
 const reasonLabel: Record<LedgerEntry["reason"], string> = {
   earn: "Earned on a sale",
@@ -14,14 +14,23 @@ const reasonLabel: Record<LedgerEntry["reason"], string> = {
   void_earn: "Points taken back (sale voided)",
   void_redeem: "Points returned (sale voided)",
   void_spend: "Wallet money returned (sale voided)",
+  credit_sale: "Sold on account",
+  repayment: "Paid back",
+  writeoff: "Written off",
+  void_credit_sale: "Account sale voided",
 };
 
-type Dialog = "new" | "edit" | "points" | "wallet" | "topup" | "rates" | null;
+type Dialog = "new" | "edit" | "points" | "wallet" | "topup" | "rates" | "repay" | "limit" | "writeoff" | "statement" | null;
 
 /** Customers: find them, see what they bought, and look after their points and wallet. */
 export function Customers() {
   const { money, toast, can } = useApp();
   const manage = can("customers.manage");
+  const khata = can("khata.use");
+  const khataManage = can("khata.manage");
+  const [view, setView] = useState<"everyone" | "owing">("everyone");
+  const [debtors, setDebtors] = useState<Debtor[]>([]);
+  const [statement, setStatement] = useState<Statement | null>(null);
   const [query, setQuery] = useState("");
   const [list, setList] = useState<Customer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -35,10 +44,17 @@ export function Customers() {
     api.searchCustomers(query).then(setList).catch((e: Error) => toast(e.message, "error"));
   }, [query, toast]);
 
+  const loadDebtors = useCallback(() => {
+    if (!khata) return;
+    api.owingCustomers().then(setDebtors).catch((e: Error) => toast(e.message, "error"));
+  }, [khata, toast]);
+
   useEffect(() => {
     const t = setTimeout(loadList, 150);
     return () => clearTimeout(t);
   }, [loadList]);
+
+  useEffect(loadDebtors, [loadDebtors]);
 
   useEffect(() => {
     api.getLoyalty().then(setConfig).catch(() => undefined);
@@ -54,11 +70,12 @@ export function Customers() {
           setHistory(h);
           setLedger(l);
         }
+        if (khata) setStatement(await api.customerStatement(id));
       } catch (e) {
         toast((e as Error).message, "error");
       }
     },
-    [manage, toast],
+    [manage, khata, toast],
   );
 
   useEffect(() => {
@@ -67,6 +84,7 @@ export function Customers() {
       setSelected(null);
       setHistory(null);
       setLedger([]);
+      setStatement(null);
     }
   }, [selectedId, loadOne]);
 
@@ -75,6 +93,7 @@ export function Customers() {
     setSelectedId(c.id);
     await loadOne(c.id);
     loadList();
+    loadDebtors();
   };
 
   return (
@@ -95,6 +114,40 @@ export function Customers() {
 
       <div className="customers-grid">
         <section className="panel customers-list">
+          {khata && (
+            <div className="methods list-switch" role="group" aria-label="Which customers to list">
+              <button className={`btn${view === "everyone" ? " btn-primary" : ""}`} aria-pressed={view === "everyone"} onClick={() => setView("everyone")}>
+                Everyone
+              </button>
+              <button className={`btn${view === "owing" ? " btn-primary" : ""}`} aria-pressed={view === "owing"} onClick={() => setView("owing")}>
+                Owes you{debtors.length > 0 ? ` (${debtors.length})` : ""}
+              </button>
+            </div>
+          )}
+          {view === "owing" && khata ? (
+            <>
+              <p className="owing-total">
+                <span className="muted small">Total owed to you</span>
+                <strong>{money(debtors.reduce((s, d) => s + d.owedMinor, 0))}</strong>
+              </p>
+              {debtors.length === 0 ? (
+                <p className="empty">Nobody owes you anything.</p>
+              ) : (
+                <ul className="customer-results" aria-label="Customers who owe you">
+                  {debtors.map((d) => (
+                    <li key={d.id}>
+                      <button className={`customer-result${d.id === selectedId ? " on" : ""}`} aria-pressed={d.id === selectedId} onClick={() => setSelectedId(d.id)}>
+                        <span className="customer-name">{d.name}</span>
+                        <span className="muted small">{d.phone ?? "No phone"}</span>
+                        <span className="customer-owes">{money(d.owedMinor)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : (
+            <>
           <input
             className="scan"
             placeholder="Phone or name"
@@ -111,11 +164,13 @@ export function Customers() {
                   <button className={`customer-result${c.id === selectedId ? " on" : ""}`} aria-pressed={c.id === selectedId} onClick={() => setSelectedId(c.id)}>
                     <span className="customer-name">{c.name}</span>
                     <span className="muted small">{c.phone ?? "No phone"}</span>
-                    <span className="customer-points">{c.points} pts</span>
+                    <span className="customer-points">{c.owedMinor > 0 ? <span className="customer-owes">owes {money(c.owedMinor)}</span> : `${c.points} pts`}</span>
                   </button>
                 </li>
               ))}
             </ul>
+          )}
+            </>
           )}
         </section>
 
@@ -148,6 +203,13 @@ export function Customers() {
                     <span className="stat-label">Wallet</span>
                     <span className="stat-value">{money(selected.walletMinor)}</span>
                   </div>
+                  {khata && (
+                    <div className="stat">
+                      <span className="stat-label">{selected.owedMinor < 0 ? "Paid ahead" : "Owes you"}</span>
+                      <span className={`stat-value${selected.owedMinor > 0 ? " stat-owes" : ""}`}>{money(Math.abs(selected.owedMinor))}</span>
+                      {selected.creditLimitMinor !== null && <span className="muted small stat-sub">Limit {money(selected.creditLimitMinor)}</span>}
+                    </div>
+                  )}
                   {history && (
                     <>
                       <div className="stat">
@@ -167,6 +229,28 @@ export function Customers() {
                     </>
                   )}
                 </div>
+                {khata && (
+                  <div className="customer-actions" aria-label="Account actions">
+                    {selected.owedMinor > 0 && (
+                      <button className="btn btn-primary" onClick={() => setDialog("repay")}>
+                        Take repayment
+                      </button>
+                    )}
+                    <button className="btn" onClick={() => setDialog("statement")}>
+                      Statement
+                    </button>
+                    {khataManage && (
+                      <button className="btn" onClick={() => setDialog("limit")}>
+                        Credit limit
+                      </button>
+                    )}
+                    {khataManage && selected.owedMinor > 0 && (
+                      <button className="btn" onClick={() => setDialog("writeoff")}>
+                        Write off
+                      </button>
+                    )}
+                  </div>
+                )}
                 {manage && (
                   <div className="customer-actions">
                     <button className="btn" onClick={() => setDialog("topup")}>
@@ -181,6 +265,35 @@ export function Customers() {
                   </div>
                 )}
               </div>
+
+              {khata && statement && statement.rows.length > 0 && (
+                <div className="panel">
+                  <h2>Account</h2>
+                  <table className="table" aria-label="Account statement">
+                    <thead>
+                      <tr>
+                        <th>When</th>
+                        <th>What</th>
+                        <th className="num">Amount</th>
+                        <th className="num">Owes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statement.rows.map((r) => (
+                        <tr key={r.id}>
+                          <td>{formatDateTime(r.at)}</td>
+                          <td>
+                            {statementLabel(r)}
+                            {r.note && <span className="muted small"> · {r.note}</span>}
+                          </td>
+                          <td className="num">{signedMoney(r.deltaMinor, money)}</td>
+                          <td className="num">{money(r.balanceMinor)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {!manage && <p className="muted small">Past orders and corrections are shown to managers.</p>}
 
@@ -222,7 +335,7 @@ export function Customers() {
               {manage && (
                 <div className="panel">
                   <h2>Points and wallet history</h2>
-                  {ledger.length === 0 ? (
+                  {ledger.filter((l) => l.account !== "credit").length === 0 ? (
                     <p className="empty">Nothing yet.</p>
                   ) : (
                     <table className="table">
@@ -235,7 +348,7 @@ export function Customers() {
                         </tr>
                       </thead>
                       <tbody>
-                        {ledger.map((l) => (
+                        {ledger.filter((l) => l.account !== "credit").map((l) => (
                           <tr key={l.id}>
                             <td>{formatDateTime(l.createdAt)}</td>
                             <td>
@@ -262,6 +375,10 @@ export function Customers() {
       {dialog === "points" && selected && <AdjustPoints customer={selected} onClose={() => setDialog(null)} onSaved={changed} />}
       {dialog === "wallet" && selected && <AdjustWallet customer={selected} onClose={() => setDialog(null)} onSaved={changed} />}
       {dialog === "topup" && selected && <TopUp customer={selected} onClose={() => setDialog(null)} onSaved={changed} />}
+      {dialog === "repay" && selected && <Repay customer={selected} onClose={() => setDialog(null)} onSaved={changed} />}
+      {dialog === "limit" && selected && <CreditLimit customer={selected} onClose={() => setDialog(null)} onSaved={changed} />}
+      {dialog === "writeoff" && selected && <WriteOff customer={selected} onClose={() => setDialog(null)} onSaved={changed} />}
+      {dialog === "statement" && selected && <StatementView customer={selected} onClose={() => setDialog(null)} />}
       {dialog === "rates" && config && <Rates config={config} onClose={() => setDialog(null)} />}
     </div>
   );
@@ -508,6 +625,193 @@ function Rates({ config, onClose }: { config: LoyaltyConfig; onClose: () => void
         </button>
         <button className="btn btn-primary" onClick={() => void save()}>
           Save
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function statementLabel(r: Statement["rows"][number]): string {
+  if (r.kind === "sale") return `Sale ${r.receiptNo ?? ""}`.trim();
+  if (r.kind === "repayment") return `Paid back${r.method ? ` (${r.method})` : ""}`;
+  if (r.kind === "writeoff") return "Written off";
+  return `Sale voided ${r.receiptNo ?? ""}`.trim();
+}
+
+function Repay({ customer, onClose, onSaved }: { customer: Customer; onClose: () => void; onSaved: Done }) {
+  const { money } = useApp();
+  const [text, setText] = useState(minorToInput(customer.owedMinor));
+  const [method, setMethod] = useState<"cash" | "card">("cash");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const amount = parseMoney(text);
+  const save = async () => {
+    if (busy) return;
+    if (amount === null || amount <= 0) return setError("Enter the amount paid back, like 500 or 250.50");
+    if (amount > customer.owedMinor) return setError(`${customer.name} owes ${money(customer.owedMinor)}, so ${money(amount)} is too much`);
+    setBusy(true);
+    try {
+      await onSaved(await api.repayCustomer(customer.id, amount, method, note));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal title={`Take repayment · ${customer.name}`} onClose={onClose}>
+      <p className="muted">Owes {money(customer.owedMinor)} now.</p>
+      <div className="methods" role="group" aria-label="How they paid">
+        {(["cash", "card"] as const).map((m) => (
+          <button key={m} className={`btn btn-lg${method === m ? " btn-primary" : ""}`} aria-pressed={method === m} onClick={() => setMethod(m)}>
+            {m === "cash" ? "Cash" : "Card"}
+          </button>
+        ))}
+      </div>
+      <label className="field">
+        Amount paid back
+        <input autoFocus inputMode="decimal" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} />
+      </label>
+      <label className="field">
+        Note (optional)
+        <input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} />
+      </label>
+      {method === "cash" && <p className="muted small">Cash goes into the drawer, so a shift must be open.</p>}
+      {amount !== null && amount > 0 && amount <= customer.owedMinor && (
+        <p className="muted small">After this they will owe {money(customer.owedMinor - amount)}.</p>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button className="btn btn-primary" disabled={busy} onClick={() => void save()}>
+          Record repayment
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function CreditLimit({ customer, onClose, onSaved }: { customer: Customer; onClose: () => void; onSaved: Done }) {
+  const { money } = useApp();
+  const [text, setText] = useState(customer.creditLimitMinor === null ? "" : minorToInput(customer.creditLimitMinor));
+  const [error, setError] = useState("");
+  const save = async () => {
+    const trimmed = text.trim();
+    const limit = trimmed === "" ? null : parseMoney(trimmed);
+    if (trimmed !== "" && limit === null) return setError("Enter an amount like 5000, or leave it empty for no limit");
+    try {
+      await onSaved(await api.setCreditLimit(customer.id, limit));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <Modal title={`Credit limit · ${customer.name}`} onClose={onClose}>
+      <p className="muted">Owes {money(Math.max(0, customer.owedMinor))} now. The limit is the most they may owe at any time.</p>
+      <label className="field">
+        Most they may owe (empty means no limit)
+        <input autoFocus inputMode="decimal" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} />
+      </label>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button className="btn btn-primary" onClick={() => void save()}>
+          Save limit
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function WriteOff({ customer, onClose, onSaved }: { customer: Customer; onClose: () => void; onSaved: Done }) {
+  const { money } = useApp();
+  const [text, setText] = useState(minorToInput(customer.owedMinor));
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const save = async () => {
+    const amount = parseMoney(text);
+    if (amount === null || amount <= 0) return setError("Enter the amount to write off, like 500");
+    if (amount > customer.owedMinor) return setError(`${customer.name} only owes ${money(customer.owedMinor)}`);
+    if (!note.trim()) return setError("Please give a reason for writing it off");
+    try {
+      await onSaved(await api.writeOffCustomer(customer.id, note, amount));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <Modal title={`Write off · ${customer.name}`} onClose={onClose}>
+      <p className="muted">Owes {money(customer.owedMinor)}. Writing off forgives that money: it is not paid back and stays in their statement with your reason.</p>
+      <label className="field">
+        Amount to write off
+        <input autoFocus inputMode="decimal" value={text} onChange={(e) => setText(e.target.value)} />
+      </label>
+      <label className="field">
+        Reason
+        <input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} />
+      </label>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button className="btn btn-primary" onClick={() => void save()}>
+          Write off
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** The printable account statement, for 58 mm (32 characters) or 80 mm (48 characters) paper. */
+function StatementView({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+  const { toast } = useApp();
+  const [width, setWidth] = useState<32 | 48>(32);
+  const [text, setText] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .customerStatementText(customer.id, width)
+      .then((t) => !cancelled && setText(t))
+      .catch((e: Error) => toast(e.message, "error"));
+    return () => {
+      cancelled = true;
+    };
+  }, [customer.id, width, toast]);
+  return (
+    <Modal title={`Statement · ${customer.name}`} onClose={onClose}>
+      <div className="methods" role="group" aria-label="Paper width">
+        {([32, 48] as const).map((w) => (
+          <button key={w} className={`btn${width === w ? " btn-primary" : ""}`} aria-pressed={width === w} onClick={() => setWidth(w)}>
+            {w === 32 ? "58 mm paper" : "80 mm paper"}
+          </button>
+        ))}
+      </div>
+      <pre className="receipt statement-preview">{text}</pre>
+      <PrintArea text={text} />
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>
+          Close
+        </button>
+        <button className="btn btn-primary" disabled={!text} onClick={() => window.print()}>
+          Print statement
         </button>
       </div>
     </Modal>

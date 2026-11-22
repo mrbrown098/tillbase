@@ -1,0 +1,84 @@
+name: Bug report
+description: Something does not work, or shows a wrong number.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting this. Please do not include real customer names, phone numbers or other private shop data in text or screenshots. Security problems go through the **Security** tab, not here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Say what you did, what you expected, and what you saw instead. Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we see it ourselves?
+      description: The exact steps, starting from opening the app.
+      placeholder: |
+        1. Sign in as the owner
+        2. Open Checkout and add two items
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple Silicon: M1 or newer)
+        - macOS (Intel)
+        - Linux (Ubuntu, Debian and similar)
+        - Linux (other)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: Operating system version
+      description: For example "Windows 11 23H2", "macOS 15.1", "Ubuntu 24.04".
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Tillbase version
+      description: The number in the installer's file name (for example Tillbase-0.5.0-win-x64-setup.exe is version 0.5.0). If you run it from source, use the "version" in the top-level package.json, and the commit (git rev-parse --short HEAD).
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: how-installed
+    attributes:
+      label: How did you install it?
+      options:
+        - Installer from the Releases page
+        - Run from source (npm run app)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js and npm versions (only if you run from source)
+      description: Output of `node --version` and `npm --version`. Leave empty if you used an installer.
+      placeholder: "v22.12.0 / 11.2.0"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or logs
+      description: Copy any red error text from the screen or from the terminal. It is formatted as code automatically.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send
+      options:
+        - label: I looked at docs/TROUBLESHOOTING.md and this issue is not already listed there.
+        - label: I removed private customer and staff details from what I pasted.

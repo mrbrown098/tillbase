@@ -6,8 +6,22 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ### Added
 - Supplier orders: place an order with a supplier, receive it in one or several deliveries (each delivery is booked as a normal purchase, so stock, average cost and what you owe update), cancel it, and see a supplier statement of purchases and payments.
+- Open-source housekeeping: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue forms for bug reports and feature requests (asking for operating system, Node version and app version), a pull request template, weekly Dependabot updates for npm and GitHub Actions (minor and patch grouped), a CodeQL code-scanning workflow, and `docs/PACKAGING.md` with the plan for winget, Scoop and Homebrew.
+- The sponsor list (`ads/`): an empty, validated `manifest.json` (zero sponsors), its JSON schema, the written sponsor policy, and a checker (`scripts/validate-ads.mjs`) that runs in CI on every pull request that touches `ads/`. Nothing is shown in the app yet.
+- A "Fresh clone" check in CI that does what a new contributor does on a new machine (clean checkout, newest npm, `npm ci`, build, launch the app) on Linux, Windows and macOS with Node 22 and 24. It fails if Electron's program was not downloaded, and a separate check on every pull request fails if `package-lock.json` fetches anything over git.
+- A new **Home** screen for owners and managers: today's sales and profit, open orders, what is running low, the latest sales, and one-tap shortcuts. Cashiers still start on Checkout.
+- A tidier side menu: grouped into Sell, Shop, Manage, Business and System, with icons, the shop's name and logo, and whether a shift is open.
+- **Shop logo**: upload your own logo in Settings. It shows in the app, on the sign-in screen and above printed receipts and statements.
+- The Tillbase logo now shows in the app, the sign-in screen and the window, and in the README.
+- Receipts and statements end with a small "Powered by Tillbase" and copyright line. You can switch it off in Settings.
+- **Khata (customer credit).** A customer can now buy on account. At the till and on orders, pick the customer and tick "Put on account (pay later)": put the whole bill on account, or just part of it and take the rest in cash or card. You can set a credit limit for each customer (managers only); a sale that would go over the limit is refused and tells you how much you can still put on account.
+- **Owes you.** A new list on the Customers screen shows everyone who owes you money, largest first, with the total. Each customer has a statement of every sale on account, repayment and write-off with what they owed after each one, and you can print it for 58 mm or 80 mm paper.
+- **Repayments.** Cashiers and managers can record money a customer pays back, by cash or card. Cash goes into the drawer count for the open shift, so the cash you expect stays right. A sale on account is counted as sales income but is never counted as cash or card received.
+- Managers can write off what a customer owes, with a reason that stays on their statement. Voiding a sale on account takes it off what the customer owes.
+- Database migration 9 (credit limit and account entries on the customer ledger; migration 7 is the PIN length, migration 8 is supplier purchase orders).
 
 ### Fixed
+- The sign-in screen now shows exactly as many empty boxes as your PIN has digits (so an 8-digit PIN shows 8 boxes) and signs you in on the last digit. Accounts made earlier learn their length the first time they sign in.
 - Installing from source with npm 11.2x and newer no longer leaves Electron without its program file ("Electron failed to install correctly"): the packages that need their install step (Electron, esbuild, SQLite) are now approved in `package.json`.
 - Installing from source with a recent npm (11 and newer) no longer fails with `EALLOWGIT`: a build tool that was fetched over git/SSH is now taken from the normal npm registry.
 

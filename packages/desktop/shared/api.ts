@@ -9,6 +9,8 @@ import type {
   Order,
   Customer,
   CustomerHistory,
+  Debtor,
+  Statement,
   CustomerInput,
   LedgerEntry,
   LoyaltyConfig,
@@ -61,7 +63,7 @@ export interface CheckoutResult {
 export interface SessionInfo {
   /** True on first run, before any staff account exists. */
   needsSetup: boolean;
-  user: Pick<User, "id" | "name" | "role"> | null;
+  user: Pick<User, "id" | "name" | "role" | "pinLength"> | null;
   permissions: Permission[];
   shift: Shift | null;
 }
@@ -129,7 +131,7 @@ export interface ProductCsvReport {
 export interface TillbaseApi {
   // Session (usable before signing in)
   session(): Promise<SessionInfo>;
-  loginUsers(): Promise<Pick<User, "id" | "name" | "role">[]>;
+  loginUsers(): Promise<Pick<User, "id" | "name" | "role" | "pinLength">[]>;
   setupOwner(name: string, pin: string): Promise<SessionInfo>;
   login(userId: string, pin: string): Promise<SessionInfo>;
   logout(): Promise<SessionInfo>;
@@ -175,7 +177,7 @@ export interface TillbaseApi {
     orderId: string,
     payments: PaymentInput[],
     /** Points to use as a discount and wallet money to spend, for the customer attached to the order. */
-    loyalty?: { redeemPoints?: number; walletMinor?: number },
+    loyalty?: { redeemPoints?: number; walletMinor?: number; onAccountMinor?: number },
   ): Promise<CheckoutResult>;
   /** Move the chosen items (or part of a line's quantity) to a new open bill for the same table. */
   // Customers, points and wallet
@@ -190,6 +192,18 @@ export interface TillbaseApi {
   adjustCustomerWallet(id: string, deltaMinor: number, note: string): Promise<Customer>;
   /** Cash goes into the open shift's drawer record; card does not touch the drawer. */
   topUpWallet(id: string, amountMinor: number, method: "cash" | "card", note?: string): Promise<Customer>;
+  // Khata: customers buying on account
+  /** Everyone who owes money, largest first. */
+  owingCustomers(): Promise<Debtor[]>;
+  customerStatement(id: string): Promise<Statement>;
+  /** The statement as plain text for printing: 32 characters wide for 58 mm paper, 48 for 80 mm. */
+  customerStatementText(id: string, width: 32 | 48): Promise<string>;
+  /** Record money paid back. Cash goes into the open shift's drawer record. */
+  repayCustomer(id: string, amountMinor: number, method: "cash" | "card", note?: string): Promise<Customer>;
+  /** Manager: the most a customer may owe, or null for no limit. */
+  setCreditLimit(id: string, limitMinor: number | null): Promise<Customer>;
+  /** Manager: forgive some (or all, when no amount is given) of what a customer owes. */
+  writeOffCustomer(id: string, note: string, amountMinor?: number): Promise<Customer>;
   getLoyalty(): Promise<LoyaltyConfig>;
   setLoyalty(config: LoyaltyConfig): Promise<LoyaltyConfig>;
   splitOrder(orderId: string, picks: { itemId: string; qty: number }[]): Promise<{ original: Order; created: Order }>;
@@ -299,6 +313,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "setKitchenStatus","cancelOrder","payOrder","splitOrder",
   "searchCustomers","getCustomer","createCustomer","updateCustomer","customerHistory","customerLedger",
   "adjustCustomerPoints","adjustCustomerWallet","topUpWallet","getLoyalty","setLoyalty",
+  "owingCustomers","customerStatement","customerStatementText","repayCustomer","setCreditLimit","writeOffCustomer",
   "listItems","getRecipe","setRecipe","recipeCosts",
   "recordPurchase","payPurchase","listPurchases","payables",
   "createPurchaseOrder","listPurchaseOrders","receivePurchaseOrder","cancelPurchaseOrder","supplierNames","supplierStatement",

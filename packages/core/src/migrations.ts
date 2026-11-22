@@ -403,8 +403,21 @@ export const migrations: Migration[] = [
       CREATE INDEX idx_sales_customer ON sales(customer_id);
     `,
   },
+  // Versions 7 and 8 are reserved for work in progress elsewhere. They are empty on purpose: the upgrade
+  // runner skips every version at or below the database's current one, so the numbers must stay in order
+  // and nothing may be added later with a number below 9 once this has shipped. Fill the entry in before
+  // release (never reorder, never reuse the number).
   {
     version: 7,
+    // The sign-in screen shows one empty dot per digit of the person's own PIN.
+    // Existing accounts learn their length the next time they sign in.
+    sql: `
+      ALTER TABLE users ADD COLUMN pin_length INTEGER;
+      CREATE INDEX idx_stock_ref ON stock_movements(ref_id, created_at);
+    `,
+  },
+  {
+    version: 8,
     sql: `
       -- Supplier purchase orders: what was ordered, and what has arrived so far.
       -- Receiving goods does NOT touch stock here: each receipt is recorded through PurchaseService, which
@@ -452,6 +465,55 @@ export const migrations: Migration[] = [
         cost_minor  INTEGER NOT NULL CHECK (cost_minor >= 0)
       );
       CREATE INDEX idx_po_receipt_lines_receipt ON purchase_order_receipt_lines(receipt_id);
+    `,
+  },
+  {
+    version: 9,
+    sql: `
+      -- Khata: customers can buy on account. The balance a customer owes is never stored: it is the sum of
+      -- their 'credit' rows in the ledger (positive = owes the shop, negative = has paid ahead).
+      -- The ledger's CHECK lists cannot be changed in place, so the table is rebuilt with the new kinds,
+      -- keeping every row, in order. Its triggers are recreated exactly as before.
+      CREATE TABLE customer_ledger_new (
+        id          TEXT PRIMARY KEY,
+        customer_id TEXT NOT NULL REFERENCES customers(id),
+        account     TEXT NOT NULL CHECK (account IN ('points', 'wallet', 'credit')),
+        delta       INTEGER NOT NULL CHECK (delta <> 0),
+        reason      TEXT NOT NULL CHECK (reason IN
+                      ('earn', 'redeem', 'spend', 'topup', 'adjust', 'void_earn', 'void_redeem', 'void_spend',
+                       'credit_sale', 'repayment', 'writeoff', 'void_credit_sale')),
+        sale_id     TEXT REFERENCES sales(id),
+        user_id     TEXT,
+        note        TEXT,
+        created_at  TEXT NOT NULL,
+        method      TEXT CHECK (method IS NULL OR method IN ('cash', 'card'))
+      );
+      INSERT INTO customer_ledger_new (id, customer_id, account, delta, reason, sale_id, user_id, note, created_at)
+        SELECT id, customer_id, account, delta, reason, sale_id, user_id, note, created_at
+          FROM customer_ledger ORDER BY rowid;
+      DROP TABLE customer_ledger;
+      ALTER TABLE customer_ledger_new RENAME TO customer_ledger;
+      CREATE INDEX idx_ledger_customer ON customer_ledger(customer_id, created_at);
+      CREATE INDEX idx_ledger_sale ON customer_ledger(sale_id);
+      CREATE INDEX idx_ledger_credit ON customer_ledger(customer_id) WHERE account = 'credit';
+
+      CREATE TRIGGER customer_ledger_no_update BEFORE UPDATE ON customer_ledger
+      BEGIN SELECT RAISE(ABORT, 'The customer ledger cannot be changed. Add a correcting entry instead.'); END;
+      CREATE TRIGGER customer_ledger_no_delete BEFORE DELETE ON customer_ledger
+      BEGIN SELECT RAISE(ABORT, 'The customer ledger cannot be changed. Add a correcting entry instead.'); END;
+      CREATE TRIGGER customer_ledger_balance AFTER INSERT ON customer_ledger
+      BEGIN
+        UPDATE customers
+           SET points       = points       + CASE WHEN NEW.account = 'points' THEN NEW.delta ELSE 0 END,
+               wallet_minor = wallet_minor + CASE WHEN NEW.account = 'wallet' THEN NEW.delta ELSE 0 END
+         WHERE id = NEW.customer_id;
+      END;
+
+      -- Optional limit on what a customer may owe (minor units). NULL means no limit.
+      ALTER TABLE customers ADD COLUMN credit_limit_minor INTEGER
+        CHECK (credit_limit_minor IS NULL OR credit_limit_minor >= 0);
+      -- The part of a sale put on account. It is income, but it is not money received: it is not a payment row.
+      ALTER TABLE sales ADD COLUMN on_account_minor INTEGER NOT NULL DEFAULT 0;
     `,
   },
 ];
