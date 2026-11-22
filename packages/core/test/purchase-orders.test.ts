@@ -312,5 +312,5 @@ describe("upgrading an existing shop to the purchase orders migration", () => {
     expect(svc.receiveAll(o.id).status).toBe("received");
     up.close();
     rmSync(dir, { recursive: true, force: true });
-  });
+  }, 30_000); // runs every migration on a fresh file; slow Windows runners need more than the 5 s default
 });
