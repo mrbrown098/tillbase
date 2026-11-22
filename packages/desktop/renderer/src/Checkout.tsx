@@ -9,6 +9,7 @@ import { maxPoints, planPayment, pointsEarned, type BillLine } from "./loyalty";
 import { minorToInput, parseMoney } from "./format";
 import { Modal, ReceiptView, PrintArea } from "./Modal";
 import { methodLabel, summarizePayments } from "./payments";
+import { PrintNotice, usePrinting } from "./printing";
 
 interface Line {
   product: ProductWithStock;
@@ -33,10 +34,19 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [config, setConfig] = useState<LoyaltyConfig | null>(null);
-  const [done, setDone] = useState<{ receipt: string; change: number; no: string } | null>(null);
+  const [done, setDone] = useState<{ receipt: string; change: number; no: string; saleId: string } | null>(null);
+  const printing = usePrinting();
+  const autoPrinted = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const refocus = useCallback(() => setTimeout(() => inputRef.current?.focus(), 0), []);
+
+  // If a receipt printer is set up, the receipt prints by itself. If it is off, the sale is already done: a message offers "Print again".
+  useEffect(() => {
+    if (!done || autoPrinted.current === done.saleId) return;
+    autoPrinted.current = done.saleId;
+    void printing.run(() => api.printReceipt(done.saleId), { auto: true });
+  }, [done, printing.run]);
 
   // Live search (and the default product grid when the box is empty).
   useEffect(() => {
@@ -158,7 +168,7 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
       setCustomer(null);
       setPaying(false);
       setQuery("");
-      setDone({ receipt, change: sale.changeMinor, no: sale.receiptNo });
+      setDone({ receipt, change: sale.changeMinor, no: sale.receiptNo, saleId: sale.id });
     } catch (e) {
       toast((e as Error).message, "error");
     }
@@ -364,8 +374,9 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
             </p>
           )}
           <ReceiptView text={done.receipt} />
+          <PrintNotice notice={printing.notice} busy={printing.busy} onSystem={printing.useSystemWindow} onDismiss={printing.dismiss} />
           <div className="modal-actions">
-            <button className="btn" onClick={() => window.print()}>
+            <button className="btn" disabled={printing.busy} onClick={() => void printing.run(() => api.printReceipt(done.saleId))}>
               Print receipt
             </button>
             <button
