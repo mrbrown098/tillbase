@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { BackupManager, openDatabase } from "@tillbase/core";
 import { channels, type IpcResult, type TillbaseApi } from "../shared/api.js";
@@ -28,8 +28,15 @@ function registerIpc(api: TillbaseApi): void {
   }
 }
 
+/** The window icon for Linux and for running from source. Installed apps carry their own icon. */
+function windowIcon(): string | undefined {
+  const file = join(__dirname, "..", "build", "icon.png");
+  return existsSync(file) ? file : undefined;
+}
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
+    icon: windowIcon(),
     width: 1280,
     height: 800,
     minWidth: 1024,

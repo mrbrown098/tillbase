@@ -3,6 +3,7 @@ import type { Db } from "./db.js";
 import { localDate } from "./dates.js";
 import { tidy } from "./inventory.js";
 import { SaleService, type PaymentInput, type Sale } from "./sales.js";
+import { customerSummary, type CustomerSummary } from "./customers.js";
 
 export const orderTypes = ["dine_in", "takeaway", "delivery"] as const;
 export type OrderType = (typeof orderTypes)[number];
@@ -66,7 +67,7 @@ export interface Order {
   deliveryAddress: string | null;
   /** The saved customer attached to this order, if any, with their balances right now. */
   customerId: string | null;
-  customer: { id: string; name: string; phone: string | null; points: number; walletMinor: number } | null;
+  customer: CustomerSummary | null;
   note: string | null;
   status: "open" | "paid" | "cancelled";
   kitchenStatus: KitchenStatus | null;
@@ -387,7 +388,7 @@ export class OrderService {
     input: {
       payments: PaymentInput[]; shiftId?: string; userId?: string; cashier?: string; allowNegativeStock?: boolean;
       /** Points to use as a discount and wallet money to spend, for the customer attached to the order. */
-      redeemPoints?: number; walletMinor?: number;
+      redeemPoints?: number; walletMinor?: number; onAccountMinor?: number;
     },
   ): Sale {
     return this.db.transaction((): Sale => {
@@ -414,6 +415,7 @@ export class OrderService {
         customerId: o.customerId,
         redeemPoints: input.redeemPoints,
         walletMinor: input.walletMinor,
+        onAccountMinor: input.onAccountMinor,
       });
 
       // Label each sale line with its add-ons, and use up add-on ingredients.
@@ -658,7 +660,7 @@ export class OrderService {
       customerPhone: r.customer_phone, deliveryAddress: r.delivery_address,
       customerId: r.customer_id,
       customer: r.customer_id
-        ? ((this.db.prepare("SELECT id, name, phone, points, wallet_minor AS walletMinor FROM customers WHERE id = ?").get(r.customer_id) as Order["customer"]) ?? null)
+        ? customerSummary(this.db, r.customer_id)
         : null,
       note: r.note, status: r.status,
       kitchenStatus: r.kitchen_status, createdAt: r.created_at, sentAt: r.sent_at, saleId: r.sale_id,

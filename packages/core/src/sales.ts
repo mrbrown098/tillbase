@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "./db.js";
+import type { CustomerSummary } from "./customers.js";
 import { allocateDiscount } from "./discount.js";
-import { loyaltyConfig, pointsFor, postLedger, reverseSaleLedger } from "./customers.js";
+import { assertWithinCreditLimit, customerSummary, loyaltyConfig, plainAmount, pointsFor, postLedger, reverseSaleLedger } from "./customers.js";
 import { taxFor } from "./money.js";
 
 export type PaymentMethod = "cash" | "card" | "other";
@@ -35,6 +36,11 @@ export interface CheckoutInput {
   redeemPoints?: number;
   /** Money to take from the customer's wallet (minor units). It counts as a payment. */
   walletMinor?: number;
+  /**
+   * The part of the bill the customer will pay later (khata). It is income now, but not money received, so
+   * it is not a payment and never reaches the drawer. Needs a customer, and respects their credit limit.
+   */
+  onAccountMinor?: number;
 }
 
 export interface SaleItem {
@@ -69,8 +75,11 @@ export interface Sale {
   discountMinor: number;
   taxMinor: number;
   totalMinor: number;
+  /** Money actually received now (cash, card, other, wallet). Does not include `onAccountMinor`. */
   paidMinor: number;
   changeMinor: number;
+  /** The part of the total put on the customer's account (khata) to be paid later. */
+  onAccountMinor: number;
   cashier: string | null;
   voidReason: string | null;
   shiftId: string | null;
@@ -81,7 +90,7 @@ export interface Sale {
   payments: Payment[];
   customerId: string | null;
   /** The customer's name and balances after this sale (current, not as at the sale). */
-  customer: { id: string; name: string; phone: string | null; points: number; walletMinor: number } | null;
+  customer: CustomerSummary | null;
   pointsEarned: number;
   pointsRedeemed: number;
 }
@@ -219,6 +228,8 @@ export class SaleService {
       const redeem = input.redeemPoints ?? 0;
       const walletWanted = input.walletMinor ?? 0;
       if (!Number.isInteger(walletWanted) || walletWanted < 0) throw new Error("The wallet amount must be a whole number of 0 or more");
+      const onAccount = input.onAccountMinor ?? 0;
+      if (!Number.isInteger(onAccount) || onAccount < 0) throw new Error("The amount to put on account must be a whole number of 0 or more");
       if (!Number.isInteger(redeem) || redeem < 0) throw new Error("Points to use must be a whole number of 0 or more");
       let cust: { id: string; name: string; points: number; wallet: number } | undefined;
       if (customerId) {
@@ -226,6 +237,8 @@ export class SaleService {
         if (!cust) throw new Error("Customer not found");
       } else if (redeem > 0 || walletWanted > 0) {
         throw new Error("Choose a customer to use points or a wallet");
+      } else if (onAccount > 0) {
+        throw new Error("Choose a customer to put this on account");
       }
       const cfg = loyaltyConfig(this.db);
       const eligible = priced.map((x) => (x.p.is_system === 1 ? 0 : x.gross - x.lineDiscount));
@@ -267,15 +280,19 @@ export class SaleService {
 
       if (walletWanted > 0) {
         if (walletWanted > cust!.wallet) {
-          throw new Error(`${cust!.name}'s wallet has ${cust!.wallet} (minor units), not ${walletWanted}`);
+          throw new Error(`${cust!.name}'s wallet has ${plainAmount(cust!.wallet)}, not ${plainAmount(walletWanted)}`);
         }
         if (walletWanted > total) throw new Error("The wallet amount is more than the bill");
+      }
+      if (onAccount > 0) {
+        if (walletWanted + onAccount > total) throw new Error("The wallet and the amount on account are more than the bill");
+        assertWithinCreditLimit(this.db, cust!.id, onAccount);
       }
       const allPayments: { method: PaymentMethod; amountMinor: number; label: string | null }[] = [
         ...input.payments.map((x) => ({ ...x, label: null })),
         ...(walletWanted > 0 ? [{ method: "other" as const, amountMinor: walletWanted, label: "wallet" }] : []),
       ];
-      if (allPayments.length === 0 && total > 0) throw new Error("A payment is required");
+      if (allPayments.length === 0 && total - onAccount > 0) throw new Error("A payment is required");
       const earned = cust ? pointsFor(eligibleNetAfter, cfg) : 0;
 
       for (const pay of input.payments) {
@@ -284,10 +301,12 @@ export class SaleService {
         }
       }
       const paid = allPayments.reduce((s, x) => s + x.amountMinor, 0);
-      if (paid < total) {
-        throw new Error(`Payment is short by ${total - paid} (minor units)`);
+      // What must be paid now is the bill less what goes on account.
+      const dueNow = total - onAccount;
+      if (paid < dueNow) {
+        throw new Error(`Payment is short by ${plainAmount(dueNow - paid)}`);
       }
-      const change = paid - total;
+      const change = paid - dueNow;
       const cashPaid = allPayments
         .filter((x) => x.method === "cash")
         .reduce((s, x) => s + x.amountMinor, 0);
@@ -300,8 +319,8 @@ export class SaleService {
         .prepare(
           `INSERT INTO sales (id, receipt_no, status, subtotal_minor, discount_minor,
              tax_minor, total_minor, paid_minor, change_minor, cashier, created_at,
-             shift_id, user_id, customer_id, points_earned, points_redeemed)
-           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             shift_id, user_id, customer_id, points_earned, points_redeemed, on_account_minor)
+           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           saleId,
@@ -319,6 +338,7 @@ export class SaleService {
           customerId,
           earned,
           redeem,
+          onAccount,
         );
 
       const insItem = this.db.prepare(
@@ -367,6 +387,7 @@ export class SaleService {
         post("points", -redeem, "redeem");
         post("wallet", -walletWanted, "spend");
         post("points", earned, "earn");
+        if (onAccount > 0) postLedger(this.db, { customerId: cust.id, account: "credit", delta: onAccount, reason: "credit_sale", saleId, userId: input.userId });
       }
       return saleId;
     });
@@ -471,6 +492,7 @@ export class SaleService {
       totalMinor: s.total_minor as number,
       paidMinor: s.paid_minor as number,
       changeMinor: s.change_minor as number,
+      onAccountMinor: (s.on_account_minor as number | undefined) ?? 0,
       cashier: (s.cashier as string | null) ?? null,
       voidReason: (s.void_reason as string | null) ?? null,
       shiftId: (s.shift_id as string | null) ?? null,
@@ -480,12 +502,7 @@ export class SaleService {
       items,
       payments,
       customerId: (s.customer_id as string | null) ?? null,
-      customer:
-        ((s.customer_id
-          ? this.db
-              .prepare("SELECT id, name, phone, points, wallet_minor AS walletMinor FROM customers WHERE id = ?")
-              .get(s.customer_id)
-          : undefined) as Sale["customer"]) ?? null,
+      customer: s.customer_id ? customerSummary(this.db, s.customer_id as string) : null,
       pointsEarned: (s.points_earned as number | undefined) ?? 0,
       pointsRedeemed: (s.points_redeemed as number | undefined) ?? 0,
     };
