@@ -11,6 +11,7 @@ import {
   CustomerService,
   OrderService,
   ProductCsvService,
+  PurchaseOrderService,
   PurchaseService,
   RecipeService,
   ProductService,
@@ -92,6 +93,7 @@ export function createHandlers(
   const shifts = new ShiftService(db);
   const recipes = new RecipeService(db);
   const purchases = new PurchaseService(db);
+  const purchaseOrders = new PurchaseOrderService(db, purchases);
   const expenses = new ExpenseService(db);
   const labour = new LabourService(db);
   const finance = new FinanceService(db);
@@ -597,6 +599,38 @@ export function createHandlers(
     async payables() {
       authorize("purchases.manage");
       return purchases.payables();
+    },
+
+    // ---- Supplier purchase orders --------------------------------------------
+    async createPurchaseOrder(input) {
+      const user = authorize("purchases.manage");
+      return purchaseOrders.create({ ...input, userId: user.id });
+    },
+    async listPurchaseOrders(status) {
+      authorize("purchases.manage");
+      return purchaseOrders.list({ status });
+    },
+    async receivePurchaseOrder(id, input, fromDrawer = false) {
+      const user = authorize("purchases.manage");
+      return db.transaction(() => {
+        const order = purchaseOrders.receive(id, { ...input, userId: user.id });
+        if (fromDrawer && (input.method ?? "cash") === "cash") {
+          drawerOut(user, input.paidMinor ?? 0, `Delivery ${order.code} from ${order.supplier}`);
+        }
+        return order;
+      })();
+    },
+    async cancelPurchaseOrder(id, reason) {
+      authorize("purchases.manage");
+      return purchaseOrders.cancel(id, reason);
+    },
+    async supplierNames() {
+      authorize("purchases.manage");
+      return purchaseOrders.suppliers();
+    },
+    async supplierStatement(supplier, from, to) {
+      authorize("purchases.manage");
+      return purchaseOrders.statement(supplier, { from, to });
     },
 
     // ---- Running costs --------------------------------------------------

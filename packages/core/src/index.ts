@@ -71,6 +71,11 @@ export type { AccountingFile } from "./accounting-export.js";
 export { CustomerService, loyaltyConfig, defaultLoyalty, pointsFor, normalizePhone } from "./customers.js";
 export type { Customer, CustomerInput, CustomerSummary, CustomerHistory, CustomerVisit, LedgerEntry, LoyaltyConfig } from "./customers.js";
 export { allocateDiscount, totalsAfterDiscount } from "./discount.js";
+export { PurchaseOrderService } from "./purchase-orders.js";
+export type {
+  PurchaseOrder, PurchaseOrderInput, PurchaseOrderLine, PurchaseOrderLineInput, PurchaseOrderReceipt,
+  PurchaseOrderStatus, ReceiveInput, StatementEntry, SupplierStatement,
+} from "./purchase-orders.js";
 export { creditBalance } from "./customers.js";
 export type { Debtor, Statement, StatementRow } from "./customers.js";
 export {

@@ -12,6 +12,7 @@ import { Kitchen } from "./Kitchen";
 import { Login, Setup } from "./Login";
 import { Money } from "./Money";
 import { Orders } from "./Orders";
+import { PurchaseOrders } from "./PurchaseOrders";
 import { Products } from "./Products";
 import { Purchases } from "./Purchases";
 import { Sales } from "./Sales";
@@ -54,6 +55,7 @@ const groups: { title: string; tabs: Tab[] }[] = [
     tabs: [
       { id: "products", label: "Menu and stock", needs: "products.manage", icon: "M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10" },
       { id: "purchases", label: "Purchases", needs: "purchases.manage", icon: "M5 8h14l-1 12H6L5 8zM9 8a3 3 0 0 1 6 0" },
+      { id: "orders-to-suppliers", label: "Supplier orders", needs: "purchases.manage", icon: "M3 7l9-4 9 4v10l-9 4-9-4V7zM12 11v10M3 7l9 4 9-4" },
       { id: "costs", label: "Running costs", needs: "expenses.manage", icon: "M3 7h18v12H3zM3 11h18M7 15h3" },
     ],
   },
@@ -192,6 +194,7 @@ function Shell() {
         {active === "money" && <Money />}
         {active === "products" && <Products />}
         {active === "purchases" && <Purchases />}
+        {active === "orders-to-suppliers" && <PurchaseOrders />}
         {active === "costs" && <Costs />}
         {active === "team" && <Team />}
         {active === "staff" && <Staff />}
