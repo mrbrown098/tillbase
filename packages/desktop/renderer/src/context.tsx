@@ -27,6 +27,8 @@ const defaults: ShopSettings = {
   locale: "en-US",
   receiptFooter: "Thank you!",
   receiptWidth: 32,
+  businessLogo: "",
+  showCredit: true,
 };
 
 const signedOut: SessionInfo = { needsSetup: false, user: null, permissions: [], shift: null };

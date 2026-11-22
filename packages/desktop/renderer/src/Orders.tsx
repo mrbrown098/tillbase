@@ -8,7 +8,7 @@ import { useApp } from "./context";
 import { CustomerPicker } from "./CustomerPicker";
 import { pointsEarned, type BillLine } from "./loyalty";
 import { minorToInput, parseMoney } from "./format";
-import { Modal, ReceiptView } from "./Modal";
+import { Modal, ReceiptView, PrintArea } from "./Modal";
 
 const typeLabel: Record<OrderType, string> = { dine_in: "Dine-in", takeaway: "Takeaway", delivery: "Delivery" };
 const orderTitle = (o: Order) => `#${o.token} · ${typeLabel[o.type]}${o.tableLabel ? ` · Table ${o.tableLabel}` : ""}`;
@@ -113,7 +113,7 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
     );
   };
 
-  const finish = async (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number }) => {
+  const finish = async (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number; onAccountMinor: number }) => {
     if (!active) return;
     const r = await run(() => api.payOrder(active.id, payments, active.customerId ? loyalty : undefined));
     if (!r) return;
@@ -329,12 +329,12 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
       )}
       {ticket && (
         <Modal title="Kitchen ticket" onClose={() => setTicket(null)}>
-          <ReceiptView text={ticket} />
+          <ReceiptView text={ticket} logo={false} />
           <div className="modal-actions">
             <button className="btn" onClick={() => window.print()}>Print ticket</button>
             <button className="btn btn-primary" autoFocus onClick={() => setTicket(null)}>Done</button>
           </div>
-          <pre id="print-area">{ticket}</pre>
+          <PrintArea text={ticket} logo={false} />
         </Modal>
       )}
       {done && (
@@ -345,7 +345,7 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
             <button className="btn" onClick={() => window.print()}>Print receipt</button>
             <button className="btn btn-primary" autoFocus onClick={() => setDone(null)}>Next order</button>
           </div>
-          <pre id="print-area">{done.receipt}</pre>
+          <PrintArea text={done.receipt} />
         </Modal>
       )}
     </div>

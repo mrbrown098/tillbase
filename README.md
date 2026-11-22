@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/logo.svg" alt="Tillbase logo" width="104">
+
 # Tillbase
 
 **The free, open-source business suite for shops, restaurants and fast-food outlets.**<br>

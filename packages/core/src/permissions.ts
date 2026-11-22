@@ -18,10 +18,12 @@ export type Permission =
   | "labour.manage"
   | "customers.use"
   | "customers.manage"
-  | "customers.view_spend";
+  | "customers.view_spend"
+  | "khata.use"
+  | "khata.manage";
 
 // Cashiers can find, add and attach customers (they are serving them). Changing or correcting a customer is a manager's job.
-const cashier: Permission[] = ["sell", "customers.use"];
+const cashier: Permission[] = ["sell", "customers.use", "khata.use"];
 
 const manager: Permission[] = [
   ...cashier,
@@ -36,6 +38,7 @@ const manager: Permission[] = [
   "expenses.manage",
   "attendance.manage",
   "customers.manage",
+  "khata.manage",
 ];
 
 // Profit figures and payroll are the owner's business: wages and margins are private.

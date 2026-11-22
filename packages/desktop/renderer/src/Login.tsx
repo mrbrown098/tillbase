@@ -1,9 +1,10 @@
+import { TillbaseMark, ShopLogo } from "./Logo";
 import { useEffect, useState } from "react";
 import type { User } from "@tillbase/core";
 import { api } from "./api";
 import { useApp } from "./context";
 
-type Person = Pick<User, "id" | "name" | "role">;
+type Person = Pick<User, "id" | "name" | "role" | "pinLength">;
 
 const roleLabel = { owner: "Owner", manager: "Manager", cashier: "Cashier" } as const;
 
@@ -39,6 +40,7 @@ export function Setup() {
   return (
     <div className="login">
       <div className="login-card">
+        <TillbaseMark size={64} />
         <h1>Welcome to Tillbase</h1>
         <p className="muted">Set up the owner account. You can add cashiers and managers afterwards.</p>
         <label className="field">
@@ -112,11 +114,21 @@ export function Login() {
     }
   };
 
-  const press = (d: string) => setPin((p) => (p.length < 8 ? p + d : p));
+  // Show exactly as many boxes as this person's PIN has; until we know, show 4 and grow.
+  const boxes = chosen?.pinLength ?? Math.max(4, pin.length);
+  const maxDigits = chosen?.pinLength ?? 8;
+  const press = (d: string) => {
+    if (pin.length >= maxDigits) return;
+    const next = pin + d;
+    setPin(next);
+    // A known length signs in by itself on the last digit.
+    if (chosen?.pinLength && next.length === chosen.pinLength) void submit(next);
+  };
 
   return (
     <div className="login">
       <div className="login-card">
+        <ShopLogo size={64} />
         <h1>{settings.storeName}</h1>
         {!chosen ? (
           <>
@@ -156,8 +168,8 @@ export function Login() {
             <p>
               Hello, <strong>{chosen.name}</strong>
             </p>
-            <div className="pin-dots" aria-label={`${pin.length} digits entered`}>
-              {Array.from({ length: Math.max(4, pin.length) }, (_, i) => (
+            <div className="pin-dots" aria-label={`${pin.length} of ${boxes} digits entered`}>
+              {Array.from({ length: boxes }, (_, i) => (
                 <span key={i} className={i < pin.length ? "dot on" : "dot"} />
               ))}
             </div>
@@ -191,7 +203,7 @@ export function Login() {
             </div>
             <button
               className="btn btn-primary btn-lg block"
-              disabled={pin.length < 4 || busy}
+              disabled={pin.length < (chosen?.pinLength ?? 4) || busy}
               onClick={() => void submit()}
             >
               Sign in

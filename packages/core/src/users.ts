@@ -8,6 +8,8 @@ export interface User {
   role: Role;
   active: boolean;
   createdAt: string;
+  /** How many digits this person's PIN has, once known. Lets the sign-in screen show the right number of boxes. */
+  pinLength: number | null;
 }
 
 interface Row {
@@ -18,6 +20,7 @@ interface Row {
   pin_hash: string;
   active: number;
   created_at: string;
+  pin_length: number | null;
 }
 
 const MAX_FAILS = 5;
@@ -30,6 +33,7 @@ function toUser(r: Row): User {
     role: r.role,
     active: r.active === 1,
     createdAt: r.created_at,
+    pinLength: r.pin_length ?? null,
   };
 }
 
@@ -67,10 +71,10 @@ export class UserService {
     try {
       this.db
         .prepare(
-          `INSERT INTO users (id, name, role, pin_salt, pin_hash, active, created_at)
-           VALUES (?, ?, ?, ?, ?, 1, ?)`,
+          `INSERT INTO users (id, name, role, pin_salt, pin_hash, active, created_at, pin_length)
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
         )
-        .run(id, name, input.role, salt, hashPin(input.pin, salt), new Date().toISOString());
+        .run(id, name, input.role, salt, hashPin(input.pin, salt), new Date().toISOString(), input.pin.length);
     } catch (e) {
       if (e instanceof Error && e.message.includes("UNIQUE")) {
         throw new Error("A staff member with this name already exists");
@@ -109,6 +113,11 @@ export class UserService {
       throw new Error("Wrong PIN");
     }
     this.attempts.delete(userId);
+    // Accounts made before PIN lengths were recorded learn theirs now.
+    if (row.pin_length == null) {
+      this.db.prepare("UPDATE users SET pin_length = ? WHERE id = ?").run(String(pin).length, userId);
+      row.pin_length = String(pin).length;
+    }
     return toUser(row);
   }
 
@@ -117,8 +126,8 @@ export class UserService {
     this.mustGet(userId);
     const salt = randomBytes(16).toString("hex");
     this.db
-      .prepare("UPDATE users SET pin_salt = ?, pin_hash = ? WHERE id = ?")
-      .run(salt, hashPin(newPin, salt), userId);
+      .prepare("UPDATE users SET pin_salt = ?, pin_hash = ?, pin_length = ? WHERE id = ?")
+      .run(salt, hashPin(newPin, salt), newPin.length, userId);
     this.attempts.delete(userId);
   }
 
