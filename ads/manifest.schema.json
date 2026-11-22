@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mrbrown098/tillbase/blob/main/ads/manifest.schema.json",
+  "title": "Tillbase sponsor manifest",
+  "description": "The list of sponsor messages the app may show. One static file, reviewed through pull requests. scripts/validate-ads.mjs checks everything here and more (banned words, image size, dates that make sense, unique ids); it also reads the limits and the category list from this file, so they are written down only once.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "updated", "slots"],
+  "properties": {
+    "version": { "const": 1, "description": "Shape version. The app ignores a manifest whose version it does not know." },
+    "updated": { "type": "string", "format": "date", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "Day this file was last changed." },
+    "slots": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "footer": {
+          "type": "array",
+          "description": "Messages for the slim line at the bottom of the window. Empty means nothing is shown.",
+          "items": { "$ref": "#/$defs/ad" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ad": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sponsor", "text", "url", "category", "start", "end", "weight"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,39}$", "description": "Unique, lower-case, for example acme-pos-2026-q4." },
+        "sponsor": { "type": "string", "minLength": 1, "maxLength": 60, "description": "Who is paying, as it should be shown." },
+        "text": { "type": "string", "minLength": 1, "maxLength": 90, "description": "The message. Plain text, at most 90 characters." },
+        "image": {
+          "type": "string",
+          "pattern": "^https://",
+          "description": "Optional. https link to a still PNG or WebP, at most 600x100 pixels and 100 KB. No query string. No animation."
+        },
+        "url": { "type": "string", "pattern": "^https://", "description": "Where a click goes. https only." },
+        "category": {
+          "enum": ["pos-hardware", "payments", "packaging", "accounting", "food-supply", "business-software", "education"],
+          "description": "Only businesses that help a shop or restaurant run."
+        },
+        "start": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "First day it may be shown (inclusive)." },
+        "end": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "Last day it may be shown (inclusive). Not before start." },
+        "weight": { "type": "integer", "minimum": 1, "maximum": 10, "description": "How often it is picked compared with the others in the same slot." }
+      }
+    }
+  },
+  "x-limits": {
+    "imageMaxWidth": 600,
+    "imageMaxHeight": 100,
+    "imageMaxBytes": 102400,
+    "imageTypes": ["png", "webp"]
+  }
+}

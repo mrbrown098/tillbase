@@ -1,0 +1,33 @@
+name: Sponsor manifest
+
+# Runs when a pull request touches the sponsor list or its checker. A change that breaks the policy in
+# ads/README.md (not https, unknown category, missing dates, oversized image, banned words...) cannot pass.
+on:
+  pull_request:
+    paths:
+      - "ads/**"
+      - "scripts/validate-ads.mjs"
+      - "scripts/validate-ads.test.mjs"
+      - ".github/workflows/ads.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ads/**"
+      - "scripts/validate-ads.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate ads/manifest.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: The checker's own tests
+        run: node --test scripts/validate-ads.test.mjs
+      - name: Check the manifest (downloads each image to measure it)
+        run: node scripts/validate-ads.mjs
