@@ -96,17 +96,19 @@ try {
   note(`userData folder: ${info.userData}`);
   if (expectPackaged && !info.packaged) fail("expected a packaged app but app.isPackaged is false");
 
-  // 1. First-run setup screen.
+  // 1. First run: the Tillbase splash, then the welcome screen of the guided setup.
+  await page.getByRole("button", { name: /Tillbase\. Press to continue/ }).click();
   await page.getByRole("heading", { name: "Welcome to Tillbase" }).waitFor();
-  note("first-run setup screen is showing");
+  note("first-run welcome screen is showing");
   await page.screenshot({ path: join(shots, "1-setup.png") });
 
-  // 2. Create the owner account.
-  await page.getByLabel("Shop name", { exact: true }).fill("Smoke Test Shop");
+  // 2. Create the owner account, then skip the optional questions.
+  await page.getByRole("button", { name: "Get started" }).click();
   await page.getByLabel("Your name", { exact: true }).fill("Smoke Owner");
   await page.getByLabel("PIN (4 to 8 digits)", { exact: true }).fill("2468");
   await page.getByLabel("Repeat PIN", { exact: true }).fill("2468");
-  await page.getByRole("button", { name: "Create owner account" }).click();
+  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByRole("button", { name: "Skip the rest of setup" }).click();
 
   // 3. Main window with the Home tab selected (owners start on Home).
   const current = page.locator('nav[aria-label="Main"] button[aria-current="page"]');
@@ -114,7 +116,7 @@ try {
   const label = (await current.innerText()).trim();
   if (label !== "Home") fail(`expected the Home tab to be selected, found "${label}"`);
   else note("main window is showing the Home tab");
-  await page.getByText("Smoke Test Shop").first().waitFor();
+  await page.getByText("My Shop").first().waitFor(); // the default name, since the smoke test skips the setup questions
 
   // Give late errors (failed data loads, etc.) a moment to show up.
   await page.waitForTimeout(1500);

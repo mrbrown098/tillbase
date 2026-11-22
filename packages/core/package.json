@@ -19,6 +19,10 @@
       "types": "./dist/receipt.d.ts",
       "default": "./dist/receipt.js"
     },
+    "./business": {
+      "types": "./dist/business.d.ts",
+      "default": "./dist/business.js"
+    },
     "./discount": {
       "types": "./dist/discount.d.ts",
       "default": "./dist/discount.js"
