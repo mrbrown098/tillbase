@@ -1,3 +1,4 @@
+import { BusinessProfileSettings } from "./BusinessProfileSettings";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { useApp } from "./context";
@@ -140,6 +141,7 @@ export function Settings() {
           Save settings
         </button>
       </div>
+      <BusinessProfileSettings />
       <p className="muted">
         Prices are stored with two decimal places. Currencies without decimals are not supported yet.
       </p>

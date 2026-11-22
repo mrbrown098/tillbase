@@ -376,7 +376,10 @@ function OrderDetails({
   onClose: () => void;
   onSave: (v: { type: OrderType; tableLabel: string; customerName: string; customerPhone: string; deliveryAddress: string; deliveryFeeMinor: number; note: string; customerId: string | null }) => Promise<void>;
 }) {
-  const [type, setType] = useState<OrderType>(order?.type ?? "takeaway");
+  const { profile } = useApp();
+  // Only the kinds of order this business takes are offered (an existing order always keeps its own kind).
+  const offered = (Object.keys(typeLabel) as OrderType[]).filter((t) => !profile || profile.orderTypes.includes(t) || t === order?.type);
+  const [type, setType] = useState<OrderType>(order?.type ?? offered.find((t) => t === "takeaway") ?? offered[0] ?? "takeaway");
   const [tableLabel, setTable] = useState(order?.tableLabel ?? "");
   const [customerName, setName] = useState(order?.customerName ?? "");
   const [customerPhone, setPhone] = useState(order?.customerPhone ?? "");
@@ -410,7 +413,7 @@ function OrderDetails({
   return (
     <Modal title={title} onClose={onClose}>
       <div className="methods" role="group" aria-label="Order type">
-        {(Object.keys(typeLabel) as OrderType[]).map((t) => (
+        {offered.map((t) => (
           <button key={t} className={`btn btn-lg${type === t ? " btn-primary" : ""}`} aria-pressed={type === t} onClick={() => setType(t)}>
             {typeLabel[t]}
           </button>

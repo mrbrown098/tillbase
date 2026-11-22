@@ -19,6 +19,8 @@ import type {
   OrderInput,
   PaymentInput,
   PrinterConfig,
+  BusinessProfile,
+  BusinessProfilePatch,
   CheckoutInput,
   Employee,
   EmployeeInput,
@@ -303,6 +305,18 @@ export interface TillbaseApi {
   printTestPage(openDrawer?: boolean): Promise<PrintResult>;
   /** Open the cash drawer without a sale. Managers only, because it is a "no sale" drawer opening. */
   openCashDrawer(): Promise<PrintResult>;
+
+  // First-run setup and the business profile (what kind of business this is, and what the menu shows).
+  /** Any signed-in user can read it (the menu and Home follow it). */
+  getBusinessProfile(): Promise<BusinessProfile>;
+  /** Save setup answers. Owner only. */
+  saveBusinessProfile(patch: BusinessProfilePatch): Promise<BusinessProfile>;
+  /** First run only: create the owner account AND mark setup as started, in one step, so an interrupted setup can be resumed. */
+  beginOnboarding(name: string, pin: string): Promise<SessionInfo>;
+  /** Setup is finished (or skipped): the wizard is not shown again. Owner only. */
+  finishOnboarding(): Promise<BusinessProfile>;
+  /** The owner chose to go through setup again. Keeps all answers and all data. Owner only. */
+  restartOnboarding(): Promise<BusinessProfile>;
 }
 
 /**
@@ -363,4 +377,5 @@ export const channels: (keyof TillbaseApi)[] = [
   "changeOwnPin",
   "chooseProductCsv","productCsvTemplate","exportProductCsv","saveCsvFile","previewProductCsv","importProductCsv",
   "getPrinter","setPrinter","printReceipt","printKitchenTicket","printStatement","printTestPage","openCashDrawer",
+  "getBusinessProfile","saveBusinessProfile","beginOnboarding","finishOnboarding","restartOnboarding",
 ];

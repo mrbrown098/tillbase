@@ -95,3 +95,29 @@ export {
 export type { PaperMm, Raster, Rgba, JobOptions } from "./escpos.js";
 export { PrinterConfigService, defaultPrinterConfig } from "./printer.js";
 export type { PrinterConfig } from "./printer.js";
+export {
+  BusinessProfileService,
+  profiles as businessProfiles,
+  businessTypes,
+  retailKinds,
+  retailKindLabel,
+  optionalModules,
+  moduleLabel,
+  countries,
+  countryByCode,
+  guessCountry,
+  isTimeZone,
+  isModuleShown,
+  homeShortcuts,
+  productsLabelFor,
+} from "./business.js";
+export type {
+  BusinessProfile,
+  BusinessProfilePatch,
+  BusinessType,
+  RetailKind,
+  ModuleId,
+  OnboardingStatus,
+  ProfileDefinition,
+  Country,
+} from "./business.js";

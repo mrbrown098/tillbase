@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Modifier } from "@tillbase/core";
 import type { ProductWithStock } from "../../shared/api";
 import { api } from "./api";
+import { productsLabelFor } from "@tillbase/core/business";
 import { useApp } from "./context";
 import { bpToPercent, minorToInput, parseMoney, parseQty, percentToBp } from "./format";
 import { ImportExport } from "./ImportExport";
@@ -17,7 +18,10 @@ export const lossReasons = [
 ] as const;
 
 export function Products() {
-  const { money, toast, can } = useApp();
+  const { money, toast, can, profile } = useApp();
+  // Shops and pharmacies sell "products"; restaurants and everyone set up the old way keep "menu items".
+  const shopWording = profile?.type === "retail" || profile?.type === "pharmacy";
+  const item = shopWording ? "product" : "menu item";
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ProductWithStock[]>([]);
   const [editing, setEditing] = useState<ProductWithStock | "new" | null>(null);
@@ -56,9 +60,9 @@ export function Products() {
   return (
     <div className="page">
       <div className="page-head">
-        <h1>Menu and stock</h1>
+        <h1>{profile ? productsLabelFor(profile) : "Menu and stock"}</h1>
         <div className="seg" role="tablist" aria-label="Kind">
-          <button role="tab" aria-selected={kind === "product"} className={kind === "product" ? "on" : ""} onClick={() => setKind("product")}>Menu items</button>
+          <button role="tab" aria-selected={kind === "product"} className={kind === "product" ? "on" : ""} onClick={() => setKind("product")}>{shopWording ? "Products" : "Menu items"}</button>
           <button role="tab" aria-selected={kind === "ingredient"} className={kind === "ingredient" ? "on" : ""} onClick={() => setKind("ingredient")}>Ingredients</button>
         </div>
         <div className="row">
@@ -88,7 +92,7 @@ export function Products() {
             </button>
           )}
           <button className="btn btn-primary" onClick={() => setEditing("new")}>
-            {kind === "product" ? "Add menu item" : "Add ingredient"}
+            {kind === "product" ? `Add ${item}` : "Add ingredient"}
           </button>
         </div>
       </div>
@@ -160,7 +164,7 @@ export function Products() {
       </table>
       {items.length === 0 && (
         <p className="empty">
-          {kind === "product" ? "No menu items yet." : "No ingredients yet. Add what you buy (chicken, buns, oil) so each dish gets a real cost."}
+          {kind === "product" ? `No ${item}s yet.` : "No ingredients yet. Add what you buy (chicken, buns, oil) so each dish gets a real cost."}
         </p>
       )}
       {addOns && <AddOns onClose={() => setAddOns(false)} />}
@@ -218,13 +222,14 @@ function ProductForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { toast } = useApp();
+  const { toast, profile } = useApp();
+  const itemWord = profile?.type === "retail" || profile?.type === "pharmacy" ? "product" : "menu item";
   const [name, setName] = useState(product?.name ?? "");
   const [barcode, setBarcode] = useState(product?.barcode ?? "");
   const [sku, setSku] = useState(product?.sku ?? "");
   const [price, setPrice] = useState(product ? minorToInput(product.priceMinor) : "");
   const [cost, setCost] = useState(product ? minorToInput(product.costMinor) : "");
-  const [tax, setTax] = useState(product ? bpToPercent(product.taxRateBp) : "0");
+  const [tax, setTax] = useState(product ? bpToPercent(product.taxRateBp) : profile?.tax.enabled && profile.tax.defaultRateBp != null ? bpToPercent(profile.tax.defaultRateBp) : "0");
   const [track, setTrack] = useState(product?.trackStock ?? true);
   const [reorder, setReorder] = useState(String(product?.reorderLevel ?? 0));
   const [opening, setOpening] = useState("0");
@@ -273,7 +278,7 @@ function ProductForm({
   };
 
   return (
-    <Modal title={`${product ? "Edit" : "Add"} ${ing ? "ingredient" : "menu item"}`} onClose={onClose} wide>
+    <Modal title={`${product ? "Edit" : "Add"} ${ing ? "ingredient" : itemWord}`} onClose={onClose} wide>
       <div className="form-grid">
         <label className="field span2">
           Name
