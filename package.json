@@ -22,5 +22,14 @@
   },
   "devDependencies": {
     "playwright-core": "^1.65.1"
+  },
+  "overrides": {
+    "@electron/rebuild": "^4.2.1"
+  },
+  "allowScripts": {
+    "electron": true,
+    "esbuild": true,
+    "better-sqlite3": true,
+    "electron-winstaller": true
   }
 }
