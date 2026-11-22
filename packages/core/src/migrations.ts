@@ -416,7 +416,57 @@ export const migrations: Migration[] = [
       CREATE INDEX idx_stock_ref ON stock_movements(ref_id, created_at);
     `,
   },
-  { version: 8, sql: "-- reserved" },
+  {
+    version: 8,
+    sql: `
+      -- Supplier purchase orders: what was ordered, and what has arrived so far.
+      -- Receiving goods does NOT touch stock here: each receipt is recorded through PurchaseService, which
+      -- writes the purchase, the stock movements and the new average cost. purchase_order_receipts links a
+      -- receipt to that purchase.
+      CREATE TABLE purchase_orders (
+        id            TEXT PRIMARY KEY,
+        number        INTEGER NOT NULL UNIQUE,
+        supplier      TEXT NOT NULL,
+        reference     TEXT,
+        note          TEXT,
+        status        TEXT NOT NULL CHECK (status IN ('open', 'received', 'cancelled')),
+        user_id       TEXT,
+        created_at    TEXT NOT NULL,
+        cancelled_at  TEXT,
+        cancel_reason TEXT
+      );
+      CREATE INDEX idx_po_status ON purchase_orders(status, created_at);
+      CREATE INDEX idx_po_supplier ON purchase_orders(supplier COLLATE NOCASE);
+
+      CREATE TABLE purchase_order_lines (
+        id             TEXT PRIMARY KEY,
+        order_id       TEXT NOT NULL REFERENCES purchase_orders(id),
+        product_id     TEXT NOT NULL REFERENCES products(id),
+        qty_ordered    REAL NOT NULL CHECK (qty_ordered > 0),
+        unit_cost_minor INTEGER NOT NULL CHECK (unit_cost_minor >= 0),
+        qty_received   REAL NOT NULL DEFAULT 0 CHECK (qty_received >= 0)
+      );
+      CREATE INDEX idx_po_lines_order ON purchase_order_lines(order_id);
+
+      CREATE TABLE purchase_order_receipts (
+        id          TEXT PRIMARY KEY,
+        order_id    TEXT NOT NULL REFERENCES purchase_orders(id),
+        purchase_id TEXT NOT NULL REFERENCES purchases(id),
+        user_id     TEXT,
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX idx_po_receipts_order ON purchase_order_receipts(order_id);
+
+      CREATE TABLE purchase_order_receipt_lines (
+        id          TEXT PRIMARY KEY,
+        receipt_id  TEXT NOT NULL REFERENCES purchase_order_receipts(id),
+        line_id     TEXT NOT NULL REFERENCES purchase_order_lines(id),
+        qty         REAL NOT NULL CHECK (qty > 0),
+        cost_minor  INTEGER NOT NULL CHECK (cost_minor >= 0)
+      );
+      CREATE INDEX idx_po_receipt_lines_receipt ON purchase_order_receipt_lines(receipt_id);
+    `,
+  },
   {
     version: 9,
     sql: `
