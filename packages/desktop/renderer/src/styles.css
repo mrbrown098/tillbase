@@ -880,3 +880,13 @@ tr.inactive td {
 .row-void .badge { text-decoration: none; }
 .page-actions { display: flex; gap: 8px; }
 @media (max-width: 900px) { .customers-grid { grid-template-columns: 1fr; } }
+
+/* ---- Khata (customer credit) ---- */
+.account-box { border-top: 1px solid var(--line); padding-top: 8px; display: grid; gap: 6px; }
+.account-box p { margin: 0; }
+.customer-owes { font-weight: 600; color: var(--danger, #b42318); white-space: nowrap; }
+.stat-owes { color: var(--danger, #b42318); }
+.owing-total { display: flex; justify-content: space-between; align-items: baseline; margin: 8px 0 4px; }
+.list-switch { margin-bottom: 8px; }
+.statement-preview { max-height: 50vh; overflow: auto; }
+.stat-sub { display: block; }

@@ -113,7 +113,7 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
     );
   };
 
-  const finish = async (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number }) => {
+  const finish = async (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number; onAccountMinor: number }) => {
     if (!active) return;
     const r = await run(() => api.payOrder(active.id, payments, active.customerId ? loyalty : undefined));
     if (!r) return;

@@ -143,7 +143,7 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
     );
   };
 
-  const finish = async (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number }) => {
+  const finish = async (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number; onAccountMinor: number }) => {
     try {
       const { sale, receipt } = await api.checkout({
         lines: cart.map((l) => ({
@@ -152,7 +152,7 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
           discountMinor: l.discountMinor,
         })),
         payments,
-        ...(customer ? { customerId: customer.id, redeemPoints: loyalty.redeemPoints, walletMinor: loyalty.walletMinor } : {}),
+        ...(customer ? { customerId: customer.id, redeemPoints: loyalty.redeemPoints, walletMinor: loyalty.walletMinor, onAccountMinor: loyalty.onAccountMinor } : {}),
       });
       setCart([]);
       setCustomer(null);
@@ -594,7 +594,7 @@ function PayInner({
     <Modal title={`Take payment · ${money(total)}`} onClose={onClose}>
       {header}
       {total === 0 ? (
-        <p className="pay-status">Nothing left to pay. Points and wallet cover the whole bill.</p>
+        <p className="pay-status">Nothing to pay now. Points, wallet and account cover the whole bill.</p>
       ) : (
         methodButtons
       )}
@@ -660,7 +660,7 @@ export function CustomerBar({
   onChoose,
   onClear,
 }: {
-  customer: Customer | { name: string; phone: string | null; points: number; walletMinor: number } | null;
+  customer: { name: string; phone: string | null; points: number; walletMinor: number; owedMinor: number } | null;
   earnHint: number;
   onChoose: () => void;
   onClear: () => void;
@@ -680,6 +680,7 @@ export function CustomerBar({
         <span className="muted small">
           {customer.points} point{customer.points === 1 ? "" : "s"}
           {customer.walletMinor > 0 ? ` · wallet ${money(customer.walletMinor)}` : ""}
+          {customer.owedMinor > 0 ? ` · owes ${money(customer.owedMinor)}` : ""}
           {earnHint > 0 ? ` · earns ${earnHint}` : ""}
         </span>
       </div>
@@ -705,17 +706,19 @@ export function PayModal({
   lines: BillLine[];
   /** Untaxed charges that points cannot reduce, such as a delivery fee. */
   extraMinor: number;
-  customer: Customer | { name: string; points: number; walletMinor: number } | null;
+  customer: { name: string; points: number; walletMinor: number; owedMinor: number; creditLimitMinor: number | null } | null;
   config: LoyaltyConfig | null;
   onClose: () => void;
-  onConfirm: (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number }) => Promise<void>;
+  onConfirm: (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number; onAccountMinor: number }) => Promise<void>;
 }) {
-  const { money } = useApp();
+  const { money, can } = useApp();
   const value = config?.pointValueMinor ?? 0;
   const items = lines.reduce((s, l) => s + l.netMinor, 0);
   const most = customer ? maxPoints(customer.points, items, value) : 0;
   const [pointsText, setPointsText] = useState("");
   const [useWallet, setUseWallet] = useState(false);
+  const [onAccount, setOnAccount] = useState(false);
+  const [accountText, setAccountText] = useState("");
 
   const typed = pointsText.trim() === "" ? 0 : Number(pointsText);
   const pointsValid = Number.isInteger(typed) && typed >= 0 && typed <= most;
@@ -737,7 +740,26 @@ export function PayModal({
         ? `${customer.name} only has ${customer.points} point${customer.points === 1 ? "" : "s"}`
         : `Points can only pay for the items. The most here is ${most}`;
 
-  const showLoyalty = !!customer && (most > 0 || customer.walletMinor > 0);
+  // Khata: put some or all of what is left on the customer's account. Leaving the amount empty means all of it.
+  const canAccount = !!customer && can("khata.use");
+  const typedAccount = accountText.trim() === "" ? plan.dueMinor : parseMoney(accountText);
+  const accountMinor = onAccount && typedAccount !== null ? Math.min(typedAccount, plan.dueMinor) : 0;
+  const room = customer && customer.creditLimitMinor !== null ? Math.max(0, customer.creditLimitMinor - customer.owedMinor) : null;
+  const accountProblem = !onAccount
+    ? null
+    : typedAccount === null || typedAccount < 0
+      ? "Enter the amount to put on account, like 150 or 99.50"
+      : typedAccount > plan.dueMinor
+        ? `That is more than what is left to pay (${money(plan.dueMinor)})`
+        : room !== null && typedAccount > room
+          ? room === 0
+            ? `${customer!.name} is at their credit limit and needs to pay something back first`
+            : `Over their credit limit. The most you can put on account is ${money(room)}`
+          : null;
+  // While the account amount is wrong, show the normal payment screen (blocked) rather than "nothing to pay".
+  const payNow = plan.dueMinor - (accountProblem ? 0 : accountMinor);
+
+  const showLoyalty = !!customer && (most > 0 || customer.walletMinor > 0 || canAccount);
   const header = showLoyalty && customer && (
     <div className="loyalty-box" aria-label="Points and wallet">
       <p>
@@ -775,6 +797,42 @@ export function PayModal({
           Use wallet ({money(Math.min(customer.walletMinor, plan.payableMinor))} of {money(customer.walletMinor)})
         </label>
       )}
+      {canAccount && customer && (
+        <div className="account-box">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={onAccount}
+              onChange={(e) => {
+                setOnAccount(e.target.checked);
+                setAccountText("");
+              }}
+            />
+            Put on account (pay later)
+          </label>
+          <p className="muted small">
+            {customer.owedMinor > 0 ? `${customer.name} owes ${money(customer.owedMinor)} now. ` : `${customer.name} owes nothing now. `}
+            {customer.creditLimitMinor !== null ? `Limit ${money(customer.creditLimitMinor)}.` : "No limit set."}
+          </p>
+          {onAccount && (
+            <label className="field">
+              Amount on account (leave empty for all {money(plan.dueMinor)})
+              <input inputMode="decimal" value={accountText} placeholder={minorToInput(plan.dueMinor)} onChange={(e) => setAccountText(e.target.value)} aria-invalid={!!accountProblem} />
+            </label>
+          )}
+          {accountProblem && (
+            <p className="form-error" role="alert">
+              {accountProblem}
+            </p>
+          )}
+          {onAccount && !accountProblem && accountMinor > 0 && (
+            <p className="muted small">
+              {money(accountMinor)} goes on account. They will owe {money(customer.owedMinor + accountMinor)}.
+              {payNow > 0 ? ` Pay ${money(payNow)} now.` : ""}
+            </p>
+          )}
+        </div>
+      )}
       {(plan.discountMinor > 0 || plan.walletMinor > 0) && (
         <p className="muted small">
           {plan.discountMinor > 0 && `Points take ${money(plan.discountMinor)} off. `}
@@ -787,12 +845,12 @@ export function PayModal({
 
   return (
     <PayInner
-      total={plan.dueMinor}
+      total={payNow}
       header={header}
-      blocked={!pointsValid}
+      blocked={!pointsValid || !!accountProblem}
       onClose={onClose}
       onConfirm={async (payments) => {
-        await onConfirm(payments, { redeemPoints: redeem, walletMinor: plan.walletMinor });
+        await onConfirm(payments, { redeemPoints: redeem, walletMinor: plan.walletMinor, onAccountMinor: accountMinor });
       }}
     />
   );

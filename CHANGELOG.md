@@ -4,6 +4,13 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ## [Unreleased]
 
+### Added
+- **Khata (customer credit).** A customer can now buy on account. At the till and on orders, pick the customer and tick "Put on account (pay later)": put the whole bill on account, or just part of it and take the rest in cash or card. You can set a credit limit for each customer (managers only); a sale that would go over the limit is refused and tells you how much you can still put on account.
+- **Owes you.** A new list on the Customers screen shows everyone who owes you money, largest first, with the total. Each customer has a statement of every sale on account, repayment and write-off with what they owed after each one, and you can print it for 58 mm or 80 mm paper.
+- **Repayments.** Cashiers and managers can record money a customer pays back, by cash or card. Cash goes into the drawer count for the open shift, so the cash you expect stays right. A sale on account is counted as sales income but is never counted as cash or card received.
+- Managers can write off what a customer owes, with a reason that stays on their statement. Voiding a sale on account takes it off what the customer owes.
+- Database migration 9 (credit limit and account entries on the customer ledger; migrations 7 and 8 are reserved).
+
 ### Fixed
 - Installing from source with npm 11.2x and newer no longer leaves Electron without its program file ("Electron failed to install correctly"): the packages that need their install step (Electron, esbuild, SQLite) are now approved in `package.json`.
 - Installing from source with a recent npm (11 and newer) no longer fails with `EALLOWGIT`: a build tool that was fetched over git/SSH is now taken from the normal npm registry.
