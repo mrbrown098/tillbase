@@ -58,7 +58,7 @@ export interface CheckoutResult {
 export interface SessionInfo {
   /** True on first run, before any staff account exists. */
   needsSetup: boolean;
-  user: Pick<User, "id" | "name" | "role"> | null;
+  user: Pick<User, "id" | "name" | "role" | "pinLength"> | null;
   permissions: Permission[];
   shift: Shift | null;
 }
@@ -126,7 +126,7 @@ export interface ProductCsvReport {
 export interface TillbaseApi {
   // Session (usable before signing in)
   session(): Promise<SessionInfo>;
-  loginUsers(): Promise<Pick<User, "id" | "name" | "role">[]>;
+  loginUsers(): Promise<Pick<User, "id" | "name" | "role" | "pinLength">[]>;
   setupOwner(name: string, pin: string): Promise<SessionInfo>;
   login(userId: string, pin: string): Promise<SessionInfo>;
   logout(): Promise<SessionInfo>;

@@ -3,7 +3,7 @@ import type { Customer, CustomerHistory, Debtor, LedgerEntry, LoyaltyConfig, Sta
 import { api } from "./api";
 import { useApp } from "./context";
 import { formatDateTime, minorToInput, parseMoney } from "./format";
-import { Modal } from "./Modal";
+import { Modal, PrintArea } from "./Modal";
 
 const reasonLabel: Record<LedgerEntry["reason"], string> = {
   earn: "Earned on a sale",
@@ -805,7 +805,7 @@ function StatementView({ customer, onClose }: { customer: Customer; onClose: () 
         ))}
       </div>
       <pre className="receipt statement-preview">{text}</pre>
-      <pre id="print-area">{text}</pre>
+      <PrintArea text={text} />
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>
           Close

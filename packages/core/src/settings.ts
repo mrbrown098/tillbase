@@ -6,6 +6,10 @@ export interface ShopSettings {
   locale: string;
   receiptFooter: string;
   receiptWidth: number;
+  /** The shop's own logo as a small data: URL (PNG, JPEG or WebP), or "" for none. */
+  businessLogo: string;
+  /** Print a small "Tillbase" credit and copyright line under the receipt footer. */
+  showCredit: boolean;
 }
 
 export const defaultSettings: ShopSettings = {
@@ -14,7 +18,18 @@ export const defaultSettings: ShopSettings = {
   locale: "en-US",
   receiptFooter: "Thank you!",
   receiptWidth: 32,
+  businessLogo: "",
+  showCredit: true,
 };
+
+/** Largest logo we keep: it is stored in the database and shown on every screen. */
+export const MAX_LOGO_BYTES = 300_000;
+
+/** The footer for printed receipts and statements: the shop's own words, then the optional Tillbase credit. */
+export function footerWithCredit(s: Pick<ShopSettings, "receiptFooter" | "showCredit">, year = new Date().getFullYear()): string {
+  if (!s.showCredit) return s.receiptFooter;
+  return `${s.receiptFooter}\nPowered by Tillbase (free POS)\n(c) ${year} Tillbase contributors`;
+}
 
 /** Key/value shop settings stored in the local database. */
 export class SettingsService {
@@ -34,6 +49,8 @@ export class SettingsService {
       receiptWidth: stored.receiptWidth
         ? Number(stored.receiptWidth)
         : defaultSettings.receiptWidth,
+      businessLogo: stored.businessLogo ?? defaultSettings.businessLogo,
+      showCredit: stored.showCredit === undefined ? defaultSettings.showCredit : stored.showCredit === "true",
     };
   }
 
@@ -51,6 +68,14 @@ export class SettingsService {
         patch.receiptWidth > 80)
     ) {
       throw new Error("Receipt width must be a whole number between 20 and 80");
+    }
+    if (patch.businessLogo !== undefined && patch.businessLogo !== "") {
+      if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(patch.businessLogo)) {
+        throw new Error("The logo must be a PNG, JPEG or WebP picture");
+      }
+      if (patch.businessLogo.length > MAX_LOGO_BYTES) {
+        throw new Error("The logo is too big. Use a picture under 200 KB");
+      }
     }
     const put = this.db.prepare(
       "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",

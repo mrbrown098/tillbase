@@ -407,7 +407,15 @@ export const migrations: Migration[] = [
   // runner skips every version at or below the database's current one, so the numbers must stay in order
   // and nothing may be added later with a number below 9 once this has shipped. Fill the entry in before
   // release (never reorder, never reuse the number).
-  { version: 7, sql: "-- reserved" },
+  {
+    version: 7,
+    // The sign-in screen shows one empty dot per digit of the person's own PIN.
+    // Existing accounts learn their length the next time they sign in.
+    sql: `
+      ALTER TABLE users ADD COLUMN pin_length INTEGER;
+      CREATE INDEX idx_stock_ref ON stock_movements(ref_id, created_at);
+    `,
+  },
   { version: 8, sql: "-- reserved" },
   {
     version: 9,

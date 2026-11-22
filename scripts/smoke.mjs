@@ -10,7 +10,7 @@
 //   --expect-packaged fail unless the app reports app.isPackaged === true
 //
 // What it checks: the first-run "Welcome to Tillbase" screen appears, the owner can be created, the
-// main window then shows the Checkout tab, and the app logged no errors (renderer or main process).
+// main window then shows the Home tab, and the app logged no errors (renderer or main process).
 // On Linux it passes --no-sandbox, which CI containers and root shells need; this is a property of the
 // test environment, not of the installer.
 import { mkdirSync, mkdtempSync, existsSync, rmSync, statSync } from "node:fs";
@@ -108,12 +108,12 @@ try {
   await page.getByLabel("Repeat PIN", { exact: true }).fill("2468");
   await page.getByRole("button", { name: "Create owner account" }).click();
 
-  // 3. Main window with the Checkout tab selected.
+  // 3. Main window with the Home tab selected (owners start on Home).
   const current = page.locator('nav[aria-label="Main"] button[aria-current="page"]');
   await current.waitFor();
   const label = (await current.innerText()).trim();
-  if (label !== "Checkout") fail(`expected the Checkout tab to be selected, found "${label}"`);
-  else note("main window is showing the Checkout tab");
+  if (label !== "Home") fail(`expected the Home tab to be selected, found "${label}"`);
+  else note("main window is showing the Home tab");
   await page.getByText("Smoke Test Shop").first().waitFor();
 
   // Give late errors (failed data loads, etc.) a moment to show up.

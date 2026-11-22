@@ -3,7 +3,7 @@ import type { Sale, SalesSummary } from "@tillbase/core";
 import { api } from "./api";
 import { useApp } from "./context";
 import { formatDateTime, todayRange } from "./format";
-import { Modal, ReceiptView } from "./Modal";
+import { Modal, ReceiptView, PrintArea } from "./Modal";
 
 export function Sales() {
   const { money, toast, can } = useApp();
@@ -121,7 +121,7 @@ export function Sales() {
               Close
             </button>
           </div>
-          <pre id="print-area">{viewing.text}</pre>
+          <PrintArea text={viewing.text} />
         </Modal>
       )}
 

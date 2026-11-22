@@ -224,3 +224,35 @@ describe("shifts", () => {
     expect(shifts.recent().map((s) => s.id)).toEqual([b.id, a.id]);
   });
 });
+
+describe("PIN length for the sign-in screen", () => {
+  it("remembers how many digits each PIN has, and updates it when the PIN changes", () => {
+    const d = openDatabase(":memory:");
+    const u = new UserService(d);
+    const eight = u.create({ name: "Boss", pin: "12345678", role: "owner" });
+    const four = u.create({ name: "Sara", pin: "4321", role: "cashier" });
+    expect(eight.pinLength).toBe(8);
+    expect(four.pinLength).toBe(4);
+    u.changePin(four.id, "654321");
+    expect(u.get(four.id)!.pinLength).toBe(6);
+  });
+
+  it("learns the length of an older account the first time it signs in", () => {
+    const d = openDatabase(":memory:");
+    const u = new UserService(d);
+    const old = u.create({ name: "Old", pin: "123456", role: "manager" });
+    d.prepare("UPDATE users SET pin_length = NULL WHERE id = ?").run(old.id);
+    expect(u.get(old.id)!.pinLength).toBeNull();
+    u.authenticate(old.id, "123456");
+    expect(u.get(old.id)!.pinLength).toBe(6);
+  });
+
+  it("does not record anything for a wrong PIN", () => {
+    const d = openDatabase(":memory:");
+    const u = new UserService(d);
+    const old = u.create({ name: "Old", pin: "123456", role: "manager" });
+    d.prepare("UPDATE users SET pin_length = NULL WHERE id = ?").run(old.id);
+    expect(() => u.authenticate(old.id, "99999")).toThrow("Wrong PIN");
+    expect(u.get(old.id)!.pinLength).toBeNull();
+  });
+});
