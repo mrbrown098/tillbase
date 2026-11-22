@@ -131,6 +131,8 @@ After adding signing, update this document and the README so they no longer say 
 
 Every pull request and every release runs the installer jobs in `.github/workflows/installers.yml` on real Windows, macOS (Apple Silicon and Intel) and Linux machines. A job only passes when the **installed** app launches and completes the smoke test (`scripts/smoke.mjs`).
 
+Every pull request also runs a **Fresh clone** job (`.github/workflows/ci.yml`) that behaves like a new contributor on a new machine: clean checkout, no dependency cache, the newest npm, `npm ci`, build, and the app smoke test, on Linux, Windows and macOS with Node 22 and Node 24. It fails if Electron's program was not downloaded (`scripts/check-electron-installed.mjs`), which is what happens when a new npm blocks install scripts. A separate quick job runs `scripts/check-lockfile.mjs`, which fails if `package-lock.json` fetches anything over git (npm 11 refuses those).
+
 Not covered by any automated check:
 
 - Gatekeeper and SmartScreen behaviour on a real downloaded file (the CI machines install files that were never downloaded, so they are not quarantined).
