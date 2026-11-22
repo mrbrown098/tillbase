@@ -1,6 +1,6 @@
 {
   "name": "@tillbase/desktop",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Tillbase desktop point-of-sale app (Electron + React).",
   "license": "MIT",
   "private": true,

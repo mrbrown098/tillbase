@@ -33,6 +33,7 @@ We could not find reliable public information about **LogicPOS**, so it is left 
 
 - No multi-branch or multi-terminal sync yet.
 - No tax-authority invoices yet.
+- No pharmacy-specific features yet (batches, expiry blocking, prescriptions).
 - Direct printing is for network (Ethernet/Wi-Fi) printers only; USB and Bluetooth printers use the system print window for now.
 - Younger: fewer shops have used it. Please try it and tell us what breaks.
 

@@ -4,6 +4,10 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-22
+
+A big usability release: a new Home screen and menu, shop logos, customer credit (khata), supplier orders, direct receipt printing, and an optional sponsor line and update notice. Existing shop data is upgraded automatically (database migrations 7 to 9); a backup is taken at start-up, as always.
+
 ### Added
 - Sponsor banner: one slim, clearly labelled line at the bottom of the Home screen, read from the public `ads/manifest.json`. Text and a small still picture only, never at checkout, payment or login, nothing about the shop is sent, and it disappears when offline or when there is no sponsor. Owners can turn it off in Settings (`TILLBASE_NO_ADS=1` turns it off for a whole machine). Outside ad networks stay disabled; see `docs/ADS-PROVIDERS.md`.
 - Update notice: the owner sees "Tillbase X is available" on Home when a newer stable release exists, with What is new, Remind me later and Update now (opens the official download page; nothing is installed silently and a sale is never interrupted). Settings shows the version and a Check for updates button. Works offline (it just shows nothing) and backs off if GitHub rate-limits.
