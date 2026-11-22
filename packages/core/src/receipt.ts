@@ -1,6 +1,7 @@
 import { formatMoney } from "./money.js";
 import type { Statement } from "./customers.js";
 import type { Sale } from "./sales.js";
+import type { KitchenTicket } from "./orders.js";
 
 export interface ReceiptOptions {
   storeName: string;
@@ -115,4 +116,22 @@ export function formatStatement(st: Statement, opts: ReceiptOptions & { printedA
   out.push(line);
   out.push(opts.footer ?? "Thank you!");
   return out.join("\n");
+}
+
+const orderTypeLabel = { dine_in: "Dine-in", takeaway: "Takeaway", delivery: "Delivery" } as const;
+
+/** The kitchen ticket: only what was newly sent, with add-ons and notes. `width` is 28 on screen, 32 or 48 on paper. */
+export function formatKitchenTicket(t: KitchenTicket, opts: { width?: number } = {}): string {
+  const width = opts.width ?? 28;
+  const rule = "-".repeat(width);
+  const lines = t.items.map(
+    (i) => `${i.qty} x ${i.name}${i.modifiers.length ? `\n    + ${i.modifiers.join(", ")}` : ""}${i.note ? `\n    NOTE: ${i.note}` : ""}`,
+  );
+  return [
+    `KITCHEN  #${t.token}`,
+    `${orderTypeLabel[t.type]}${t.tableLabel ? `  Table ${t.tableLabel}` : ""}`,
+    rule,
+    ...lines,
+    ...(t.note ? [rule, `ORDER NOTE: ${t.note}`] : []),
+  ].join("\n");
 }

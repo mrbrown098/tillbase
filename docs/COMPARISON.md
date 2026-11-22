@@ -17,7 +17,7 @@ We could not find reliable public information about **LogicPOS**, so it is left 
 | Staff attendance and payroll | Yes | Not listed | Staff activity reports |
 | Profit and loss with "where the money went" | Yes (owner only) | Accounting and reports | Profit reports |
 | Customers and loyalty | Yes: phone search, points, a wallet and khata (sell on account, credit limits, repayments, printable statements) | Customer groups, rewards, coupons | Accounts and balances |
-| Thermal printers, cash drawer, scales | Receipts for 58/80 mm paper now; direct thermal printing and drawer planned | Barcode and scale support | Documented hardware paths |
+| Thermal printers, cash drawer, scales | Receipts, kitchen tickets and statements for 58/80 mm paper, printed straight to a network thermal printer, with the shop logo and cash drawer kick; USB and Bluetooth printers planned | Barcode and scale support | Documented hardware paths |
 | Tax invoices (GST and similar) | Not yet. Not approved for FBR, PRA or SRB | Not listed | GST invoices |
 | Multiple branches | Planned | Paid MultiStore module | Yes (cloud sync is paid) |
 | Urdu | Planned | Not listed | Not listed |
@@ -33,7 +33,7 @@ We could not find reliable public information about **LogicPOS**, so it is left 
 
 - No multi-branch or multi-terminal sync yet.
 - No tax-authority invoices yet.
-- No direct thermal printing yet.
+- Direct printing is for network (Ethernet/Wi-Fi) printers only; USB and Bluetooth printers use the system print window for now.
 - Younger: fewer shops have used it. Please try it and tell us what breaks.
 
 All of these are on the [roadmap](ROADMAP.md).

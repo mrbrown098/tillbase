@@ -29,6 +29,7 @@ Source for the competitor facts: [pricing](https://www.granetpro.com/pricing.htm
 - [x] Shifts: open with a float, cash in and out, close with a counted drawer and variance
 - [x] Fast-food orders: token numbers, order types, held orders, add-ons, kitchen tickets and board
 - [x] Delivery charge on delivery orders (counted as income, never as a menu item), several payments on one sale in the pay screen, and splitting a dine-in bill by items into separate bills
+- [x] Direct ESC/POS thermal printing over the network (58/80 mm): receipt with logo, kitchen ticket, statement, cash drawer kick, "Print again" when the printer is off
 - [x] Khata: sell on account, credit limits, repayments through the shift, owes-you list and printable statements
 - [x] Customers with loyalty points and a prepaid wallet: phone search at the till and on orders, points earned per sale (rate set on the Customers screen) and used as a pre-tax discount, wallet top-up and spend, an append-only ledger that voids reverse, history and spend totals (owner only), points and wallet on the receipt
 - [x] CSV import and export of menu items, with a preview of every change before anything is saved (ingredients and recipes are not included)
@@ -53,7 +54,7 @@ Still to do: purchase orders, expiry tracking, supplier ledger statements, recur
 Several terminals on one local network, then multi-branch with sync when online, plus an owner dashboard.
 
 **Phase 6: hardware and shipping**
-Direct ESC/POS thermal printing and cash drawer kick, silent printing, translations including Urdu.
+USB and Bluetooth receipt printers, printing right-to-left scripts such as Urdu on receipts, translations including Urdu.
 
 ## Compliance note (important)
 

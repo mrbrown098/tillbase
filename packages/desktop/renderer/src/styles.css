@@ -1155,3 +1155,9 @@ tr.inactive td {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
 }
+
+/* Receipt printer trouble message (Print again) */
+.print-notice { background: #fff3f0; border: 1px solid #f0b4a6; border-radius: 8px; padding: 10px 14px; margin: 12px 0; }
+.print-notice p { margin: 4px 0; }
+.print-notice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.printer-settings .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
