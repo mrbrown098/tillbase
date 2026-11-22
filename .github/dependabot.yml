@@ -1,0 +1,30 @@
+# Weekly dependency updates. Minor and patch updates arrive as one grouped pull request per ecosystem;
+# major updates arrive on their own, because they can break things (Electron and better-sqlite3 in
+# particular, which are native and must be tested on all three operating systems).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps"
+    groups:
+      npm-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions-minor-and-patch:
+        update-types: ["minor", "patch"]

@@ -1,0 +1,65 @@
+name: Feature request
+description: Suggest something Tillbase should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tillbase is free and stays free: every feature is for everyone. Tell us about your shop or restaurant and the problem you have; that matters more than a specific solution.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe a real situation. What do you do today, and what goes wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Tillbase to do?
+      description: How you imagine it working, in plain words. Sketches are welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: business
+    attributes:
+      label: What kind of business is it for?
+      options:
+        - Shop or retail
+        - Restaurant, cafe or fast food
+        - Takeaway or delivery
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system you use
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - More than one
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Tillbase version you use now
+      description: The number in the installer's file name, for example 0.5.0. Write "not using it yet" if that is the case.
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version (only if you run from source)
+      placeholder: "v22.12.0"
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything else we should know?
+      description: Other ways you tried to solve it, tax or legal rules in your country that matter, links to examples.
+  - type: checkboxes
+    id: build
+    attributes:
+      label: Would you like to build it?
+      options:
+        - label: I would like to work on this myself (see CONTRIBUTING.md).

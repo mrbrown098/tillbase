@@ -5,6 +5,7 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 ## [Unreleased]
 
 ### Added
+- Open-source housekeeping: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue forms for bug reports and feature requests (asking for operating system, Node version and app version), a pull request template, weekly Dependabot updates for npm and GitHub Actions (minor and patch grouped), a CodeQL code-scanning workflow, and `docs/PACKAGING.md` with the plan for winget, Scoop and Homebrew.
 - The sponsor list (`ads/`): an empty, validated `manifest.json` (zero sponsors), its JSON schema, the written sponsor policy, and a checker (`scripts/validate-ads.mjs`) that runs in CI on every pull request that touches `ads/`. Nothing is shown in the app yet.
 - A "Fresh clone" check in CI that does what a new contributor does on a new machine (clean checkout, newest npm, `npm ci`, build, launch the app) on Linux, Windows and macOS with Node 22 and 24. It fails if Electron's program was not downloaded, and a separate check on every pull request fails if `package-lock.json` fetches anything over git.
 - A new **Home** screen for owners and managers: today's sales and profit, open orders, what is running low, the latest sales, and one-tap shortcuts. Cashiers still start on Checkout.
