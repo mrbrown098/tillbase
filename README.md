@@ -145,6 +145,7 @@ Amounts are in minor units and tax rates in basis points: `1800` means 18.00%.
 - [x] Installers for Windows, macOS and Linux; tests on all three
 
 **In review now** (open pull requests)
+- [ ] Sponsor banner and update notice
 - [ ] Accountant export (Excel-ready CSV files)
 - [ ] Second-place backups and restore
 
@@ -154,7 +155,6 @@ Amounts are in minor units and tax rates in basis points: `1800` means 18.00%.
 - [ ] Direct thermal printing and cash drawer; shift Z-report
 - [ ] Supplier purchase orders
 - [ ] Urdu interface and receipts
-- [ ] Sponsor banners (clean, local, no tracking)
 - [ ] Signed installers and auto-update
 - [ ] Several terminals on one network, then multi-branch sync
 
@@ -198,7 +198,7 @@ Be honest in code and in the UI: do not claim tax-authority approval, and do not
 Tillbase has no company behind it and no investors. It runs on volunteer time and free tools. If it helps your shop, you can help it stay free:
 
 - **Sponsor or donate:** see the *Sponsor* button at the top of this repository.
-- **Sponsor a banner:** a small clearly labelled banner can run on a few non-critical screens (never checkout, payment or login). No tracking, no scripts, no adult, gambling or alcohol ads. Rules and how to apply will be in `ads/README.md` once banners ship (planned, **not in the app yet**).
+- **Sponsor a banner:** a small clearly labelled banner can run on a few non-critical screens (never checkout, payment or login). No tracking, no scripts, no adult, gambling or alcohol ads. Rules and how to apply are in [`ads/README.md`](ads/README.md); how outside ad networks are judged is in [docs/ADS-PROVIDERS.md](docs/ADS-PROVIDERS.md). Owners can switch the banner off in Settings.
 - **Contribute:** code, translations (Urdu first), testing in a real shop, or bug reports all count.
 
 Money raised goes first to a code-signing certificate (removes the "unknown publisher" warning), then a website and download hosting.

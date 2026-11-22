@@ -29,6 +29,7 @@ const defaults: ShopSettings = {
   receiptWidth: 32,
   businessLogo: "",
   showCredit: true,
+  showSponsors: true,
 };
 
 const signedOut: SessionInfo = { needsSetup: false, user: null, permissions: [], shift: null };

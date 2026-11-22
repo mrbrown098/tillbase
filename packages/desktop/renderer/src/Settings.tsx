@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { useApp } from "./context";
 
@@ -11,6 +11,17 @@ export function Settings() {
   const [width, setWidth] = useState(String(settings.receiptWidth));
   const [error, setError] = useState("");
   const [credit, setCredit] = useState(settings.showCredit);
+  const [sponsors, setSponsors] = useState(settings.showSponsors);
+  const [version, setVersion] = useState("");
+  const [checkMsg, setCheckMsg] = useState("");
+  useEffect(() => {
+    api.appVersion().then(setVersion).catch(() => undefined);
+  }, []);
+  const checkUpdates = async () => {
+    setCheckMsg("Checking...");
+    const u = await api.checkForUpdate(true).catch(() => null);
+    setCheckMsg(u ? `Version ${u.version} is available` : "You have the latest version, or there is no internet right now");
+  };
   const fileRef = useRef<HTMLInputElement>(null);
 
   const save = async () => {
@@ -23,6 +34,7 @@ export function Settings() {
         receiptFooter: footer,
         receiptWidth: Number(width),
         showCredit: credit,
+        showSponsors: sponsors,
       });
       setSettings(next);
       toast("Settings saved");
@@ -100,6 +112,19 @@ export function Settings() {
           Receipt footer
           <input value={footer} onChange={(e) => setFooter(e.target.value)} />
         </label>
+        <label className="check span2">
+          <input type="checkbox" checked={sponsors} onChange={(e) => setSponsors(e.target.checked)} />
+          Show the small, labelled sponsor line on the Home screen (it helps keep Tillbase free; never shown at checkout)
+        </label>
+        <div className="field span2">
+          Tillbase version {version || "..."}
+          <div className="logo-row">
+            <button type="button" className="btn" onClick={() => void checkUpdates()}>
+              Check for updates
+            </button>
+            <span className="muted small">{checkMsg}</span>
+          </div>
+        </div>
         <label className="check span2">
           <input type="checkbox" checked={credit} onChange={(e) => setCredit(e.target.checked)} />
           Print "Powered by Tillbase" and the copyright line under the footer

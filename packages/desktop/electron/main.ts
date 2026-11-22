@@ -1,9 +1,11 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BackupManager, openDatabase } from "@tillbase/core";
+import { BackupManager, openDatabase, SettingsService } from "@tillbase/core";
 import { channels, type IpcResult, type TillbaseApi } from "../shared/api.js";
+import { createAdService } from "./ads.js";
 import { createFileDialogs } from "./files.js";
+import { createUpdateChecker } from "./updates.js";
 import { createHandlers } from "./handlers.js";
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -83,7 +85,14 @@ void app.whenReady().then(() => {
     app.relaunch();
     app.exit(0);
   };
-  registerIpc(createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, afterShiftClose: quietBackup, files }));
+  // Only ever open https links, and only ones the sponsor list or the release check produced.
+  const openExternal = (url: string) => (url.startsWith("https://") ? shell.openExternal(url) : undefined);
+  const settingsReader = new SettingsService(db);
+  const ads = createAdService({ openExternal, enabled: () => settingsReader.get().showSponsors });
+  const updates = createUpdateChecker({ currentVersion: app.getVersion(), openExternal });
+  registerIpc(
+    createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, afterShiftClose: quietBackup, files, ads, updates, appVersion: app.getVersion() }),
+  );
   createWindow();
 
   app.on("activate", () => {

@@ -49,6 +49,8 @@ import type {
   ShiftSummaryView,
   TillbaseApi,
 } from "../shared/api.js";
+import type { AdView } from "./ads.js";
+import type { UpdateInfo } from "./updates.js";
 import { logoRaster, sendToPrinter, type DecodeFn } from "./printing.js";
 
 /**
@@ -70,6 +72,10 @@ export function createHandlers(
     /** Called after a restore has swapped the data in: the app must restart. */
     afterRestore?: () => void;
     afterShiftClose?: () => void;
+    /** Sponsor line and update check, supplied by the Electron main process (tests pass fakes). */
+    ads?: { current: () => Promise<AdView | null>; open: (id: string) => Promise<void> };
+    updates?: { check: (force?: boolean) => Promise<UpdateInfo | null>; openDownload: () => Promise<void> };
+    appVersion?: string;
     /** Receipt printer plumbing. Tests replace these so no real printer or Electron is needed. */
     printing?: {
       send?: (host: string, port: number, bytes: Uint8Array) => Promise<void>;
@@ -741,6 +747,27 @@ export function createHandlers(
       // Built first so a bad date range is reported before any folder window opens.
       const files = accounting.all(from, to).map((f) => ({ name: f.name, text: f.csv }));
       return hooks.files.saveFiles(files);
+    },
+    async sponsorBanner() {
+      authorize();
+      return hooks.ads ? hooks.ads.current() : null;
+    },
+    async openSponsor(id: string) {
+      authorize();
+      if (typeof id === "string") await hooks.ads?.open(id);
+    },
+    async appVersion() {
+      return hooks.appVersion ?? "dev";
+    },
+    async checkForUpdate(force?: boolean) {
+      // Only people who run the shop need to hear about new versions.
+      const who = authorize();
+      if (!can(who.role, "settings.manage")) return null;
+      return hooks.updates ? hooks.updates.check(force === true) : null;
+    },
+    async openDownloadPage() {
+      authorize("settings.manage");
+      await hooks.updates?.openDownload();
     },
     async backupNow() {
       authorize("settings.manage");
