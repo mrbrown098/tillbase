@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { taxFor } from "@tillbase/core/money";
-import type { Customer, LoyaltyConfig, Modifier, Order, OrderType, PaymentInput } from "@tillbase/core";
+import { formatKitchenTicket } from "@tillbase/core/receipt";
+import type { Customer, KitchenTicket, LoyaltyConfig, Modifier, Order, OrderType, PaymentInput } from "@tillbase/core";
 import type { ProductWithStock } from "../../shared/api";
 import { api } from "./api";
 import { CustomerBar, PayModal } from "./Checkout";
@@ -9,6 +10,7 @@ import { CustomerPicker } from "./CustomerPicker";
 import { pointsEarned, type BillLine } from "./loyalty";
 import { minorToInput, parseMoney } from "./format";
 import { Modal, ReceiptView, PrintArea } from "./Modal";
+import { PrintNotice, usePrinting } from "./printing";
 
 const typeLabel: Record<OrderType, string> = { dine_in: "Dine-in", takeaway: "Takeaway", delivery: "Delivery" };
 const orderTitle = (o: Order) => `#${o.token} · ${typeLabel[o.type]}${o.tableLabel ? ` · Table ${o.tableLabel}` : ""}`;
@@ -29,7 +31,10 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
   const [choosing, setChoosing] = useState(false);
   const [config, setConfig] = useState<LoyaltyConfig | null>(null);
   const [ticket, setTicket] = useState<string | null>(null);
-  const [done, setDone] = useState<{ receipt: string; change: number; no: string } | null>(null);
+  const [done, setDone] = useState<{ receipt: string; change: number; no: string; saleId: string } | null>(null);
+  const [ticketData, setTicketData] = useState<KitchenTicket | null>(null);
+  const printing = usePrinting();
+  const autoPrinted = useRef<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(
@@ -107,10 +112,9 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
     if (!t) return;
     await reload(active.id);
     toast("Sent to the kitchen");
-    const lines = t.items.map((i) => `${i.qty} x ${i.name}${i.modifiers.length ? `\n    + ${i.modifiers.join(", ")}` : ""}${i.note ? `\n    NOTE: ${i.note}` : ""}`);
-    setTicket(
-      [`KITCHEN  #${t.token}`, `${typeLabel[t.type]}${t.tableLabel ? `  Table ${t.tableLabel}` : ""}`, "-".repeat(28), ...lines, ...(t.note ? ["-".repeat(28), `ORDER NOTE: ${t.note}`] : [])].join("\n"),
-    );
+    setTicketData(t);
+    setTicket(formatKitchenTicket(t));
+    void printing.run(() => api.printKitchenTicket(t), { auto: true });
   };
 
   const finish = async (payments: PaymentInput[], loyalty: { redeemPoints: number; walletMinor: number; onAccountMinor: number }) => {
@@ -118,9 +122,16 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
     const r = await run(() => api.payOrder(active.id, payments, active.customerId ? loyalty : undefined));
     if (!r) return;
     setPaying(false);
-    setDone({ receipt: r.receipt, change: r.sale.changeMinor, no: r.sale.receiptNo });
+    setDone({ receipt: r.receipt, change: r.sale.changeMinor, no: r.sale.receiptNo, saleId: r.sale.id });
     await reload(null);
   };
+
+  // A paid order prints its receipt by itself when a receipt printer is set up. If it is off, a message offers "Print again".
+  useEffect(() => {
+    if (!done || autoPrinted.current === done.saleId) return;
+    autoPrinted.current = done.saleId;
+    void printing.run(() => api.printReceipt(done.saleId), { auto: true });
+  }, [done, printing.run]);
 
   const unsent = active?.items.some((i) => !i.sent) ?? false;
   // A bill can be split when there is more than one thing on it to hand over (the original keeps at least one).
@@ -330,8 +341,9 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
       {ticket && (
         <Modal title="Kitchen ticket" onClose={() => setTicket(null)}>
           <ReceiptView text={ticket} logo={false} />
+          <PrintNotice notice={printing.notice} busy={printing.busy} onSystem={printing.useSystemWindow} onDismiss={printing.dismiss} />
           <div className="modal-actions">
-            <button className="btn" onClick={() => window.print()}>Print ticket</button>
+            <button className="btn" disabled={printing.busy} onClick={() => ticketData && void printing.run(() => api.printKitchenTicket(ticketData))}>Print ticket</button>
             <button className="btn btn-primary" autoFocus onClick={() => setTicket(null)}>Done</button>
           </div>
           <PrintArea text={ticket} logo={false} />
@@ -341,8 +353,9 @@ export function Orders({ onOpenShift }: { onOpenShift: () => void }) {
         <Modal title={`Paid · ${done.no}`} onClose={() => setDone(null)}>
           {done.change > 0 && <p className="change-due">Change due: <strong>{money(done.change)}</strong></p>}
           <ReceiptView text={done.receipt} />
+          <PrintNotice notice={printing.notice} busy={printing.busy} onSystem={printing.useSystemWindow} onDismiss={printing.dismiss} />
           <div className="modal-actions">
-            <button className="btn" onClick={() => window.print()}>Print receipt</button>
+            <button className="btn" disabled={printing.busy} onClick={() => void printing.run(() => api.printReceipt(done.saleId))}>Print receipt</button>
             <button className="btn btn-primary" autoFocus onClick={() => setDone(null)}>Next order</button>
           </div>
           <PrintArea text={done.receipt} />
@@ -363,7 +376,10 @@ function OrderDetails({
   onClose: () => void;
   onSave: (v: { type: OrderType; tableLabel: string; customerName: string; customerPhone: string; deliveryAddress: string; deliveryFeeMinor: number; note: string; customerId: string | null }) => Promise<void>;
 }) {
-  const [type, setType] = useState<OrderType>(order?.type ?? "takeaway");
+  const { profile } = useApp();
+  // Only the kinds of order this business takes are offered (an existing order always keeps its own kind).
+  const offered = (Object.keys(typeLabel) as OrderType[]).filter((t) => !profile || profile.orderTypes.includes(t) || t === order?.type);
+  const [type, setType] = useState<OrderType>(order?.type ?? offered.find((t) => t === "takeaway") ?? offered[0] ?? "takeaway");
   const [tableLabel, setTable] = useState(order?.tableLabel ?? "");
   const [customerName, setName] = useState(order?.customerName ?? "");
   const [customerPhone, setPhone] = useState(order?.customerPhone ?? "");
@@ -397,7 +413,7 @@ function OrderDetails({
   return (
     <Modal title={title} onClose={onClose}>
       <div className="methods" role="group" aria-label="Order type">
-        {(Object.keys(typeLabel) as OrderType[]).map((t) => (
+        {offered.map((t) => (
           <button key={t} className={`btn btn-lg${type === t ? " btn-primary" : ""}`} aria-pressed={type === t} onClick={() => setType(t)}>
             {typeLabel[t]}
           </button>

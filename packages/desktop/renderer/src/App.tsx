@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Permission } from "@tillbase/core";
+import { isModuleShown, productsLabelFor, type ModuleId } from "@tillbase/core/business";
 import { api } from "./api";
 import { Backups } from "./Backups";
 import { Checkout } from "./Checkout";
@@ -9,9 +10,11 @@ import { Customers } from "./Customers";
 import { Home } from "./Home";
 import { ShopLogo } from "./Logo";
 import { Kitchen } from "./Kitchen";
-import { Login, Setup } from "./Login";
+import { Login } from "./Login";
+import { Onboarding } from "./Onboarding";
 import { Money } from "./Money";
 import { Orders } from "./Orders";
+import { PurchaseOrders } from "./PurchaseOrders";
 import { Products } from "./Products";
 import { Purchases } from "./Purchases";
 import { Sales } from "./Sales";
@@ -24,6 +27,8 @@ interface Tab {
   id: string;
   label: string;
   needs: Permission;
+  /** A part of the menu a business can switch off (see the business profile). Without it, always shown. */
+  module?: ModuleId;
   /** 24x24 outline icon path(s). */
   icon: string;
 }
@@ -37,9 +42,9 @@ const groups: { title: string; tabs: Tab[] }[] = [
     title: "Sell",
     tabs: [
       { id: "checkout", label: "Checkout", needs: "sell", icon: "M3 4h2l2.4 10.5h10.2L20 7H6M9 19.5h.01M17 19.5h.01" },
-      { id: "orders", label: "Orders", needs: "sell", icon: "M7 3h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5a2 2 0 0 1 2-2zM9 8h6M9 12h6" },
-      { id: "kitchen", label: "Kitchen", needs: "sell", icon: "M6 14a4 4 0 1 1 1-7.9A5 5 0 0 1 17 7a4 4 0 0 1 1 7.9V20H6v-6zM6 17h12" },
-      { id: "customers", label: "Customers", needs: "customers.use", icon: "M16 19v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 19v-1a3 3 0 0 0-2-2.8" },
+      { id: "orders", module: "orders", label: "Orders", needs: "sell", icon: "M7 3h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5a2 2 0 0 1 2-2zM9 8h6M9 12h6" },
+      { id: "kitchen", module: "kitchen", label: "Kitchen", needs: "sell", icon: "M6 14a4 4 0 1 1 1-7.9A5 5 0 0 1 17 7a4 4 0 0 1 1 7.9V20H6v-6zM6 17h12" },
+      { id: "customers", module: "customers", label: "Customers", needs: "customers.use", icon: "M16 19v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 19v-1a3 3 0 0 0-2-2.8" },
     ],
   },
   {
@@ -53,15 +58,16 @@ const groups: { title: string; tabs: Tab[] }[] = [
     title: "Manage",
     tabs: [
       { id: "products", label: "Menu and stock", needs: "products.manage", icon: "M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10" },
-      { id: "purchases", label: "Purchases", needs: "purchases.manage", icon: "M5 8h14l-1 12H6L5 8zM9 8a3 3 0 0 1 6 0" },
-      { id: "costs", label: "Running costs", needs: "expenses.manage", icon: "M3 7h18v12H3zM3 11h18M7 15h3" },
+      { id: "purchases", module: "purchases", label: "Purchases", needs: "purchases.manage", icon: "M5 8h14l-1 12H6L5 8zM9 8a3 3 0 0 1 6 0" },
+      { id: "orders-to-suppliers", module: "orders-to-suppliers", label: "Supplier orders", needs: "purchases.manage", icon: "M3 7l9-4 9 4v10l-9 4-9-4V7zM12 11v10M3 7l9 4 9-4" },
+      { id: "costs", module: "costs", label: "Running costs", needs: "expenses.manage", icon: "M3 7h18v12H3zM3 11h18M7 15h3" },
     ],
   },
   {
     title: "Business",
     tabs: [
       { id: "money", label: "Money", needs: "finance.view", icon: "M12 3v18M16 7.5C15 6.5 13.7 6 12 6c-2 0-3.5 1-3.5 2.5S10 11 12 11.5s3.5 1 3.5 2.5S14 17 12 17c-1.7 0-3-.5-4-1.5" },
-      { id: "team", label: "Team and wages", needs: "attendance.manage", icon: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 19a5 5 0 0 1 10 0M16 8h5M16 12h5M16 16h3" },
+      { id: "team", module: "team", label: "Team and wages", needs: "attendance.manage", icon: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 19a5 5 0 0 1 10 0M16 8h5M16 12h5M16 16h3" },
       { id: "staff", label: "Staff", needs: "users.manage", icon: "M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3z" },
     ],
   },
@@ -86,14 +92,17 @@ function Icon({ d }: { d: string }) {
 const IDLE_MS = 5 * 60 * 1000;
 
 export function App() {
-  const { session } = useApp();
-  if (session.needsSetup) return <Setup />;
+  const { session, profile, can } = useApp();
+  // First run, or an interrupted setup the owner comes back to: the guided setup. Everyone else goes straight on.
+  if (session.needsSetup) return <Onboarding />;
   if (!session.user) return <Login />;
+  if (!profile) return <div className="login" aria-busy="true" />;
+  if (profile.status === "in_progress" && can("settings.manage")) return <Onboarding />;
   return <Shell />;
 }
 
 function Shell() {
-  const { session, setSession, settings, can, toast } = useApp();
+  const { session, setSession, settings, profile, can, toast } = useApp();
   // Owners and managers start on Home; cashiers go straight to the till.
   const firstTab = can("reports.view") ? "home" : "checkout";
   const [tab, setTab] = useState(firstTab);
@@ -122,7 +131,13 @@ function Shell() {
   }, [setSession, toast]);
 
   const shown = groups
-    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => can(t.needs)) }))
+    .map((g) => ({
+      ...g,
+      // The profile only hides parts of the menu. It never grants anything: `can` still decides.
+      tabs: g.tabs
+        .filter((t) => can(t.needs) && (!t.module || !profile || isModuleShown(profile, t.module)))
+        .map((t) => (t.id === "products" && profile ? { ...t, label: productsLabelFor(profile) } : t)),
+    }))
     .filter((g) => g.tabs.length > 0);
   const active = shown.some((g) => g.tabs.some((t) => t.id === tab)) ? tab : firstTab;
 
@@ -192,6 +207,7 @@ function Shell() {
         {active === "money" && <Money />}
         {active === "products" && <Products />}
         {active === "purchases" && <Purchases />}
+        {active === "orders-to-suppliers" && <PurchaseOrders />}
         {active === "costs" && <Costs />}
         {active === "team" && <Team />}
         {active === "staff" && <Staff />}

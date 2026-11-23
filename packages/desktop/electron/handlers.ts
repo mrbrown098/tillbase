@@ -5,10 +5,14 @@ import {
   ExpenseService,
   FinanceService,
   InventoryService,
+  BusinessProfileService,
   LabourService,
+  PAPER_CHARS,
+  PrinterConfigService,
   CustomerService,
   OrderService,
   ProductCsvService,
+  PurchaseOrderService,
   PurchaseService,
   RecipeService,
   ProductService,
@@ -18,11 +22,18 @@ import {
   ShiftService,
   UserService,
   can,
+  drawerKickJob,
   footerWithCredit,
+  formatKitchenTicket,
   formatReceipt,
   formatStatement,
+  kitchenTicketJob,
+  paperForWidth,
+  receiptJob,
+  statementJob,
   permissionsOf,
   type Db,
+  type JobOptions,
   type ImportResult,
   type Permission,
   type Sale,
@@ -35,9 +46,13 @@ import type {
   ProductCsvReport,
   ProductWithStock,
   SessionInfo,
+  PrintResult,
   ShiftSummaryView,
   TillbaseApi,
 } from "../shared/api.js";
+import type { AdView } from "./ads.js";
+import type { UpdateInfo } from "./updates.js";
+import { logoRaster, sendToPrinter, type DecodeFn } from "./printing.js";
 
 /**
  * The real implementation of the app's API. It has no Electron imports, so it
@@ -58,6 +73,15 @@ export function createHandlers(
     /** Called after a restore has swapped the data in: the app must restart. */
     afterRestore?: () => void;
     afterShiftClose?: () => void;
+    /** Sponsor line and update check, supplied by the Electron main process (tests pass fakes). */
+    ads?: { current: () => Promise<AdView | null>; open: (id: string) => Promise<void> };
+    updates?: { check: (force?: boolean) => Promise<UpdateInfo | null>; openDownload: () => Promise<void> };
+    appVersion?: string;
+    /** Receipt printer plumbing. Tests replace these so no real printer or Electron is needed. */
+    printing?: {
+      send?: (host: string, port: number, bytes: Uint8Array) => Promise<void>;
+      decodeLogo?: DecodeFn;
+    };
     /** Native file dialogs, supplied by the Electron main process. Each returns null if the person cancels. */
     files?: {
       openCsv: () => Promise<ProductCsvFile | null>;
@@ -76,6 +100,7 @@ export function createHandlers(
   const shifts = new ShiftService(db);
   const recipes = new RecipeService(db);
   const purchases = new PurchaseService(db);
+  const purchaseOrders = new PurchaseOrderService(db, purchases);
   const expenses = new ExpenseService(db);
   const labour = new LabourService(db);
   const finance = new FinanceService(db);
@@ -83,6 +108,8 @@ export function createHandlers(
   const orders = new OrderService(db, receiptPrefix);
   const productCsv = new ProductCsvService(db);
   const customers = new CustomerService(db);
+  const printerConfig = new PrinterConfigService(db);
+  const business = new BusinessProfileService(db);
 
   let current: User | null = null;
   const needBackups = (): BackupManager => {
@@ -159,6 +186,27 @@ export function createHandlers(
       shifts.addCashMovement(shift.id, user.id, -amountMinor, reason);
     } catch {
       throw new Error("There is not enough cash in the drawer for that payment");
+    }
+  };
+
+
+  // ---- Direct receipt printing -------------------------------------------
+  /**
+   * Build and send one print job. This never throws: if no printer is set up it says so (the screen then uses the
+   * system print window), and if the printer cannot be reached it returns a plain message, so a sale is never held up.
+   */
+  const sendJob = async (build: (o: JobOptions & { chars: number }) => Uint8Array, opts: { logo?: boolean; drawer?: boolean } = {}): Promise<PrintResult> => {
+    const cfg = printerConfig.get();
+    if (!cfg.host) return { status: "no_printer" };
+    try {
+      const s = settings.get();
+      const paper = paperForWidth(s.receiptWidth);
+      const logo = opts.logo ? await logoRaster(s.businessLogo, paper, hooks.printing?.decodeLogo) : null;
+      const bytes = build({ paper, logo, openDrawer: !!opts.drawer && cfg.openDrawer, chars: PAPER_CHARS[paper] });
+      await (hooks.printing?.send ?? sendToPrinter)(cfg.host, cfg.port, bytes);
+      return { status: "printed" };
+    } catch (e) {
+      return { status: "failed", message: e instanceof Error && e.message ? e.message : "The receipt printer did not answer." };
     }
   };
 
@@ -561,6 +609,38 @@ export function createHandlers(
       return purchases.payables();
     },
 
+    // ---- Supplier purchase orders --------------------------------------------
+    async createPurchaseOrder(input) {
+      const user = authorize("purchases.manage");
+      return purchaseOrders.create({ ...input, userId: user.id });
+    },
+    async listPurchaseOrders(status) {
+      authorize("purchases.manage");
+      return purchaseOrders.list({ status });
+    },
+    async receivePurchaseOrder(id, input, fromDrawer = false) {
+      const user = authorize("purchases.manage");
+      return db.transaction(() => {
+        const order = purchaseOrders.receive(id, { ...input, userId: user.id });
+        if (fromDrawer && (input.method ?? "cash") === "cash") {
+          drawerOut(user, input.paidMinor ?? 0, `Delivery ${order.code} from ${order.supplier}`);
+        }
+        return order;
+      })();
+    },
+    async cancelPurchaseOrder(id, reason) {
+      authorize("purchases.manage");
+      return purchaseOrders.cancel(id, reason);
+    },
+    async supplierNames() {
+      authorize("purchases.manage");
+      return purchaseOrders.suppliers();
+    },
+    async supplierStatement(supplier, from, to) {
+      authorize("purchases.manage");
+      return purchaseOrders.statement(supplier, { from, to });
+    },
+
     // ---- Running costs --------------------------------------------------
     async expenseCategories() {
       authorize("expenses.manage");
@@ -670,6 +750,27 @@ export function createHandlers(
       const files = accounting.all(from, to).map((f) => ({ name: f.name, text: f.csv }));
       return hooks.files.saveFiles(files);
     },
+    async sponsorBanner() {
+      authorize();
+      return hooks.ads ? hooks.ads.current() : null;
+    },
+    async openSponsor(id: string) {
+      authorize();
+      if (typeof id === "string") await hooks.ads?.open(id);
+    },
+    async appVersion() {
+      return hooks.appVersion ?? "dev";
+    },
+    async checkForUpdate(force?: boolean) {
+      // Only people who run the shop need to hear about new versions.
+      const who = authorize();
+      if (!can(who.role, "settings.manage")) return null;
+      return hooks.updates ? hooks.updates.check(force === true) : null;
+    },
+    async openDownloadPage() {
+      authorize("settings.manage");
+      await hooks.updates?.openDownload();
+    },
     async backupNow() {
       authorize("settings.manage");
       if (!hooks.backup) throw new Error("Backups are not available here");
@@ -778,6 +879,85 @@ export function createHandlers(
         onError: options.skipBadRows ? "skip" : "abort",
       });
       return csvReport(result);
+    },
+    // ---- Direct receipt printing -----------------------------------------
+    async getPrinter() {
+      authorize();
+      return printerConfig.get();
+    },
+    async setPrinter(config) {
+      authorize("settings.manage");
+      return printerConfig.set(config);
+    },
+    async printReceipt(saleId) {
+      authorize("sell");
+      const sale = sales.get(saleId);
+      if (!sale) throw new Error("Sale not found");
+      const text = receipt(sale);
+      return sendJob((o) => receiptJob(text, o), { logo: true, drawer: sale.payments.some((p) => p.method === "cash") });
+    },
+    async printKitchenTicket(ticket) {
+      authorize("sell");
+      return sendJob((o) => kitchenTicketJob(formatKitchenTicket(ticket, { width: o.chars }), o));
+    },
+    async printStatement(customerId) {
+      authorize("khata.use");
+      const st = customers.statement(customerId);
+      const s = settings.get();
+      return sendJob(
+        (o) => statementJob(formatStatement(st, { storeName: s.storeName, currency: s.currency, locale: s.locale, width: o.chars, footer: footerWithCredit(s) }), o),
+        { logo: true },
+      );
+    },
+    async printTestPage(openDrawer) {
+      authorize("settings.manage");
+      const s = settings.get();
+      return sendJob(
+        (o) => {
+          const rule = "-".repeat(o.chars);
+          const text = [s.storeName.slice(0, o.chars), rule, "Printer test", `Paper: ${o.paper} mm (${o.chars} characters)`, "1234567890".repeat(5).slice(0, o.chars), rule, "If you can read this, printing works."].join("\n");
+          return receiptJob(text, { ...o, openDrawer: !!openDrawer });
+        },
+        { logo: true },
+      );
+    },
+    async openCashDrawer() {
+      authorize("cash.movement");
+      const cfg = printerConfig.get();
+      if (!cfg.host) return { status: "no_printer" };
+      try {
+        await (hooks.printing?.send ?? sendToPrinter)(cfg.host, cfg.port, drawerKickJob());
+        return { status: "printed" };
+      } catch (e) {
+        return { status: "failed", message: e instanceof Error && e.message ? e.message : "The receipt printer did not answer." };
+      }
+    },
+    // ---- First-run setup and the business profile -------------------------
+    async getBusinessProfile() {
+      authorize();
+      return business.get();
+    },
+    async saveBusinessProfile(patch) {
+      authorize("settings.manage");
+      return business.save(patch);
+    },
+    async beginOnboarding(name, pin) {
+      if (users.count() > 0) throw new Error("Setup has already been completed");
+      // One transaction: the owner exists only together with "setup has started", so closing the app now resumes the setup.
+      current = db.transaction(() => {
+        const owner = users.create({ name, pin, role: "owner" });
+        business.begin();
+        return owner;
+      })();
+      return sessionInfo();
+    },
+    async finishOnboarding() {
+      authorize("settings.manage");
+      return business.finish();
+    },
+    async restartOnboarding() {
+      authorize("settings.manage");
+      return business.restart();
     },
   };
 }

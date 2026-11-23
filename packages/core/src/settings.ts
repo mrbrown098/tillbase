@@ -10,6 +10,8 @@ export interface ShopSettings {
   businessLogo: string;
   /** Print a small "Tillbase" credit and copyright line under the receipt footer. */
   showCredit: boolean;
+  /** Show the small, clearly labelled sponsor line on the Home screen. The owner can switch it off. */
+  showSponsors: boolean;
 }
 
 export const defaultSettings: ShopSettings = {
@@ -20,6 +22,7 @@ export const defaultSettings: ShopSettings = {
   receiptWidth: 32,
   businessLogo: "",
   showCredit: true,
+  showSponsors: true,
 };
 
 /** Largest logo we keep: it is stored in the database and shown on every screen. */
@@ -51,6 +54,7 @@ export class SettingsService {
         : defaultSettings.receiptWidth,
       businessLogo: stored.businessLogo ?? defaultSettings.businessLogo,
       showCredit: stored.showCredit === undefined ? defaultSettings.showCredit : stored.showCredit === "true",
+      showSponsors: stored.showSponsors === undefined ? defaultSettings.showSponsors : stored.showSponsors === "true",
     };
   }
 

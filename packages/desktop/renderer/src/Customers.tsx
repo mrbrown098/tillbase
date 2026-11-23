@@ -4,6 +4,7 @@ import { api } from "./api";
 import { useApp } from "./context";
 import { formatDateTime, minorToInput, parseMoney } from "./format";
 import { Modal, PrintArea } from "./Modal";
+import { PrintNotice, usePrinting } from "./printing";
 
 const reasonLabel: Record<LedgerEntry["reason"], string> = {
   earn: "Earned on a sale",
@@ -785,6 +786,7 @@ function StatementView({ customer, onClose }: { customer: Customer; onClose: () 
   const { toast } = useApp();
   const [width, setWidth] = useState<32 | 48>(32);
   const [text, setText] = useState("");
+  const printing = usePrinting();
   useEffect(() => {
     let cancelled = false;
     api
@@ -806,11 +808,12 @@ function StatementView({ customer, onClose }: { customer: Customer; onClose: () 
       </div>
       <pre className="receipt statement-preview">{text}</pre>
       <PrintArea text={text} />
+      <PrintNotice notice={printing.notice} busy={printing.busy} onSystem={printing.useSystemWindow} onDismiss={printing.dismiss} />
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>
           Close
         </button>
-        <button className="btn btn-primary" disabled={!text} onClick={() => window.print()}>
+        <button className="btn btn-primary" disabled={!text || printing.busy} onClick={() => void printing.run(() => api.printStatement(customer.id))}>
           Print statement
         </button>
       </div>

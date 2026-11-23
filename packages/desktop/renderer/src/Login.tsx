@@ -1,4 +1,4 @@
-import { TillbaseMark, ShopLogo } from "./Logo";
+import { ShopLogo } from "./Logo";
 import { useEffect, useState } from "react";
 import type { User } from "@tillbase/core";
 import { api } from "./api";
@@ -7,85 +7,6 @@ import { useApp } from "./context";
 type Person = Pick<User, "id" | "name" | "role" | "pinLength">;
 
 const roleLabel = { owner: "Owner", manager: "Manager", cashier: "Cashier" } as const;
-
-/** First run: create the owner account. */
-export function Setup() {
-  const { settings, setSession, setSettings, toast } = useApp();
-  const [shop, setShop] = useState(settings.storeName === "My Shop" ? "" : settings.storeName);
-  const [name, setName] = useState("");
-  const [pin, setPin] = useState("");
-  const [again, setAgain] = useState("");
-  const [error, setError] = useState("");
-
-  const submit = async () => {
-    setError("");
-    if (!name.trim()) return setError("Enter your name");
-    if (!/^\d{4,8}$/.test(pin)) return setError("PIN must be 4 to 8 digits");
-    if (pin !== again) return setError("The two PINs do not match");
-    try {
-      if (shop.trim()) {
-        // The owner is created first so settings can be saved with their permission.
-        const session = await api.setupOwner(name, pin);
-        setSettings(await api.updateSettings({ storeName: shop }));
-        setSession(session);
-      } else {
-        setSession(await api.setupOwner(name, pin));
-      }
-      toast("Welcome to Tillbase");
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
-  return (
-    <div className="login">
-      <div className="login-card">
-        <TillbaseMark size={64} />
-        <h1>Welcome to Tillbase</h1>
-        <p className="muted">Set up the owner account. You can add cashiers and managers afterwards.</p>
-        <label className="field">
-          Shop name
-          <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="e.g. Corner Shop" />
-        </label>
-        <label className="field">
-          Your name
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <div className="form-grid">
-          <label className="field">
-            PIN (4 to 8 digits)
-            <input
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
-            />
-          </label>
-          <label className="field">
-            Repeat PIN
-            <input
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              value={again}
-              onChange={(e) => setAgain(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              onKeyDown={(e) => e.key === "Enter" && void submit()}
-            />
-          </label>
-        </div>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-        <button className="btn btn-primary btn-lg block" onClick={() => void submit()}>
-          Create owner account
-        </button>
-      </div>
-    </div>
-  );
-}
 
 /** Pick your name, enter your PIN. */
 export function Login() {

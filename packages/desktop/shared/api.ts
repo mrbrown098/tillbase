@@ -1,3 +1,5 @@
+import type { AdView } from "../electron/ads.js";
+import type { UpdateInfo } from "../electron/updates.js";
 import type {
   BackupStatus,
   BackupWhere,
@@ -16,6 +18,9 @@ import type {
   LoyaltyConfig,
   OrderInput,
   PaymentInput,
+  PrinterConfig,
+  BusinessProfile,
+  BusinessProfilePatch,
   CheckoutInput,
   Employee,
   EmployeeInput,
@@ -32,6 +37,11 @@ import type {
   ProfitAndLoss,
   Purchase,
   PurchaseInput,
+  PurchaseOrder,
+  PurchaseOrderInput,
+  PurchaseOrderStatus,
+  ReceiveInput,
+  SupplierStatement,
   Recipe,
   LowStockItem,
   NewProduct,
@@ -215,6 +225,14 @@ export interface TillbaseApi {
   listPurchases(onlyUnpaid?: boolean): Promise<Purchase[]>;
   payables(): Promise<Payables>;
 
+  // Supplier purchase orders. Receiving goes through the purchasing service (stock, cost, what is owed).
+  createPurchaseOrder(input: Omit<PurchaseOrderInput, "userId">): Promise<PurchaseOrder>;
+  listPurchaseOrders(status?: PurchaseOrderStatus): Promise<PurchaseOrder[]>;
+  receivePurchaseOrder(id: string, input: Omit<ReceiveInput, "userId">, fromDrawer?: boolean): Promise<PurchaseOrder>;
+  cancelPurchaseOrder(id: string, reason?: string): Promise<PurchaseOrder>;
+  supplierNames(): Promise<string[]>;
+  supplierStatement(supplier: string, from?: string, to?: string): Promise<SupplierStatement>;
+
   // Running costs
   expenseCategories(): Promise<ExpenseCategory[]>;
   addExpenseCategory(name: string): Promise<ExpenseCategory>;
@@ -243,6 +261,13 @@ export interface TillbaseApi {
   /** Save the five accountant CSV files for a date range into a folder the person picks. Null if they cancel. */
   exportAccounting(from: string, to: string): Promise<{ folder: string; names: string[] } | null>;
   backupNow(): Promise<string>;
+
+  // Sponsor line and "is there a newer Tillbase?". Neither sends anything about the shop.
+  sponsorBanner(): Promise<AdView | null>;
+  openSponsor(id: string): Promise<void>;
+  appVersion(): Promise<string>;
+  checkForUpdate(force?: boolean): Promise<UpdateInfo | null>;
+  openDownloadPage(): Promise<void>;
   // Backups screen (owner only)
   backupStatus(): Promise<BackupStatus>;
   chooseBackupFolder(): Promise<BackupStatus | null>;
@@ -267,7 +292,38 @@ export interface TillbaseApi {
   saveCsvFile(suggestedName: string, text: string): Promise<string | null>;
   previewProductCsv(text: string, options?: ProductCsvOptions): Promise<ProductCsvReport>;
   importProductCsv(text: string, options?: ProductCsvOptions): Promise<ProductCsvReport>;
+
+  // Direct receipt printing. A print never throws for printer trouble: it answers with a PrintResult, so a sale is never blocked.
+  /** Where receipts go (any signed-in user can read it, so screens know whether to print by themselves). */
+  getPrinter(): Promise<PrinterConfig>;
+  setPrinter(config: Partial<PrinterConfig>): Promise<PrinterConfig>;
+  /** Print a sale's receipt (with the shop logo). Opens the cash drawer when the printer is set to and the sale took cash. */
+  printReceipt(saleId: string): Promise<PrintResult>;
+  printKitchenTicket(ticket: KitchenTicket): Promise<PrintResult>;
+  printStatement(customerId: string): Promise<PrintResult>;
+  /** Settings: print a short test page (optionally opening the drawer too). */
+  printTestPage(openDrawer?: boolean): Promise<PrintResult>;
+  /** Open the cash drawer without a sale. Managers only, because it is a "no sale" drawer opening. */
+  openCashDrawer(): Promise<PrintResult>;
+
+  // First-run setup and the business profile (what kind of business this is, and what the menu shows).
+  /** Any signed-in user can read it (the menu and Home follow it). */
+  getBusinessProfile(): Promise<BusinessProfile>;
+  /** Save setup answers. Owner only. */
+  saveBusinessProfile(patch: BusinessProfilePatch): Promise<BusinessProfile>;
+  /** First run only: create the owner account AND mark setup as started, in one step, so an interrupted setup can be resumed. */
+  beginOnboarding(name: string, pin: string): Promise<SessionInfo>;
+  /** Setup is finished (or skipped): the wizard is not shown again. Owner only. */
+  finishOnboarding(): Promise<BusinessProfile>;
+  /** The owner chose to go through setup again. Keeps all answers and all data. Owner only. */
+  restartOnboarding(): Promise<BusinessProfile>;
 }
+
+/**
+ * What happened when something was sent to the receipt printer. `no_printer`: none is set up, so the screen uses
+ * the system print window. `failed`: one is set up but could not be used; `message` says why, in plain words.
+ */
+export type PrintResult = { status: "printed" } | { status: "no_printer" } | { status: "failed"; message: string };
 
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -303,11 +359,13 @@ export const channels: (keyof TillbaseApi)[] = [
   "owingCustomers","customerStatement","customerStatementText","repayCustomer","setCreditLimit","writeOffCustomer",
   "listItems","getRecipe","setRecipe","recipeCosts",
   "recordPurchase","payPurchase","listPurchases","payables",
+  "createPurchaseOrder","listPurchaseOrders","receivePurchaseOrder","cancelPurchaseOrder","supplierNames","supplierStatement",
   "expenseCategories","addExpenseCategory","addExpense","voidExpense","listExpenses",
   "roster","clockIn","clockOut","attendance","addShiftRecord","removeShiftRecord",
   "listEmployees","createEmployee","updateEmployee","giveAdvance",
   "payrollPreview","runPayroll","payPayslip","payslips",
   "profitAndLoss","backupNow",
+  "sponsorBanner","openSponsor","appVersion","checkForUpdate","openDownloadPage",
   "backupStatus","chooseBackupFolder","clearBackupFolder","restoreBackup",
   "exportAccounting",
   "salesSummary",
@@ -318,4 +376,6 @@ export const channels: (keyof TillbaseApi)[] = [
   "resetPin",
   "changeOwnPin",
   "chooseProductCsv","productCsvTemplate","exportProductCsv","saveCsvFile","previewProductCsv","importProductCsv",
+  "getPrinter","setPrinter","printReceipt","printKitchenTicket","printStatement","printTestPage","openCashDrawer",
+  "getBusinessProfile","saveBusinessProfile","beginOnboarding","finishOnboarding","restartOnboarding",
 ];
