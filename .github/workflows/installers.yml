@@ -70,7 +70,7 @@ jobs:
 
       - name: Save screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installer-smoke-${{ matrix.id }}
           path: smoke-output/
@@ -80,7 +80,7 @@ jobs:
       # Only reached when every check above passed, so an installer that fails its smoke test is
       # never uploaded and can never be attached to a release.
       - name: Save installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installers-${{ matrix.id }}
           path: |
