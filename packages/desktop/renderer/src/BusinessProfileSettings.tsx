@@ -16,7 +16,7 @@ const orderTypeName: Record<OrderType, string> = { dine_in: "Dine-in", takeaway:
  * contact details and tax defaults, or run the guided setup again. Hiding a part never deletes anything.
  */
 export function BusinessProfileSettings() {
-  const { profile, setProfile, toast } = useApp();
+  const { profile, setProfile } = useApp();
   const [type, setType] = useState<BusinessType | null>(null);
   const [subtype, setSubtype] = useState<RetailKind | null>(null);
   const [modules, setModules] = useState<ModuleId[]>([]);
@@ -30,6 +30,8 @@ export function BusinessProfileSettings() {
   const [taxNumber, setTaxNumber] = useState("");
   const [cutoff, setCutoff] = useState(0);
   const [error, setError] = useState("");
+  const [rateError, setRateError] = useState(false);
+  const [saved, setSaved] = useState("");
   const [confirmRestart, setConfirmRestart] = useState(false);
 
   useEffect(() => {
@@ -53,10 +55,16 @@ export function BusinessProfileSettings() {
 
   const save = async () => {
     setError("");
+    setRateError(false);
+    setSaved("");
     try {
       let bp: number | null = null;
       if (taxOn) {
         bp = percentToBp(taxRate);
+        if (taxRate.trim() === "" || bp === null) {
+          setRateError(true);
+          setTimeout(() => document.getElementById("biz-tax-rate")?.focus(), 0);
+        }
         if (taxRate.trim() === "" || bp === null) throw new Error("Type the tax rate you charge, for example 5 or 17.5. Tillbase does not choose one for you");
       }
       // Choosing a different type starts that type's menu parts, then the owner's own ticks are applied on top.
@@ -70,7 +78,8 @@ export function BusinessProfileSettings() {
         tax: { enabled: taxOn, name: taxOn ? taxName : "", defaultRateBp: taxOn ? bp : null },
       });
       setProfile(p);
-      toast(type !== profile.type ? "Business type changed. Check the menu parts below." : "Saved");
+      const msg = type !== profile.type ? "Business type changed. Check the menu parts below." : "Business profile saved.";
+      setSaved(msg);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -117,6 +126,7 @@ export function BusinessProfileSettings() {
           </select>
         </label>
       )}
+      <h3 className="biz-sub">Menu and orders</h3>
       <fieldset className="onb-set">
         <legend>Parts of Tillbase to show in the menu</legend>
         {optionalModules.map((m) => (
@@ -150,6 +160,7 @@ export function BusinessProfileSettings() {
           )}
         </div>
       )}
+      <h3 className="biz-sub">Contact details and business day</h3>
       <div className="form-grid">
         <label className="field span2">
           Address
@@ -157,11 +168,11 @@ export function BusinessProfileSettings() {
         </label>
         <label className="field">
           Phone
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <input type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </label>
         <label className="field">
           Email
-          <input value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label className="field">
           Tax registration number (for your records)
@@ -180,6 +191,7 @@ export function BusinessProfileSettings() {
         </label>
       </div>
       {cutoff > 0 && <p className="onb-note"><span className="onb-badge">Saved, not used by reports yet</span> Reports and Home still count midnight to midnight.</p>}
+      <h3 className="biz-sub">Tax</h3>
       <label className="check">
         <input type="checkbox" checked={taxOn} onChange={(e) => setTaxOn(e.target.checked)} /> New items start with a tax rate I choose (Tillbase never picks one)
       </label>
@@ -191,13 +203,18 @@ export function BusinessProfileSettings() {
           </label>
           <label className="field">
             Rate (%)
-            <input inputMode="decimal" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+            <input id="biz-tax-rate" inputMode="decimal" autoComplete="off" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} aria-invalid={rateError || undefined} aria-describedby={rateError ? "biz-error" : undefined} />
           </label>
         </div>
       )}
       {error && (
-        <p className="form-error" role="alert">
+        <p className="form-error" id="biz-error" role="alert">
           {error}
+        </p>
+      )}
+      {saved && !error && (
+        <p className="onb-ok" role="status">
+          {saved}
         </p>
       )}
       <div className="modal-actions left">
