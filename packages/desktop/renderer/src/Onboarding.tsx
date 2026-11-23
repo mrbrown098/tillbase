@@ -337,7 +337,7 @@ export function Onboarding() {
         </label>
         {cutoff > 0 && (
           <p className="onb-note">
-            <span className="onb-badge">Saved, not used by reports yet</span> Tillbase remembers this, but reports and Home still count calendar days (midnight to midnight) until a later update. Sales made after midnight will show on the next date for now.
+            Reports, Home and the accountant export will count a sale made before {cutoff}:00 as the day before. Past sales keep their exact time.
           </p>
         )}
       </>
@@ -650,7 +650,7 @@ export function Onboarding() {
     const c = countryByCode(country);
     const rows: [string, string, number][] = [
       ["Owner", session.user?.name ?? ownerName, -1],
-      ["Country", `${c?.name ?? "Other"} · ${currency} · ${timezone || "this computer's time zone"}${cutoff ? ` · new day starts at ${cutoff}:00 (saved, not used by reports yet)` : ""}`, STEP.country],
+      ["Country", `${c?.name ?? "Other"} · ${currency} · ${timezone || "this computer's time zone"}${cutoff ? ` · new day starts at ${cutoff}:00` : ""}`, STEP.country],
       ["Business", `${def?.label ?? "Not chosen"}${subtype ? ` (${retailKindLabel[subtype]})` : ""}`, STEP.type],
       ["Menu shows", ["Home", "Checkout", "Shift", "Sales", def?.productsLabel ?? "Menu and stock", ...modules.map((m) => moduleLabel[m].label)].join(", "), STEP.setup],
       ...(modules.includes("orders") ? ([["Orders", orderTypes.map((t) => orderTypeLabels[t].label).join(", "), STEP.setup]] as [string, string, number][]) : []),

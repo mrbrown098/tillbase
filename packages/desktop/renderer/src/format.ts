@@ -1,4 +1,5 @@
 import { toMinor } from "@tillbase/core/money";
+import { addDays, dayEndISO, dayStartISO, localDate, startOfMonth } from "@tillbase/core/dates";
 
 /** Parse what a person typed ("12", "12.5", "1,200.00") into minor units, or null if invalid. */
 export function parseMoney(text: string): number | null {
@@ -36,41 +37,29 @@ export function formatDateTime(iso: string): string {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** Start of today and start of tomorrow in the shop's local time, as ISO strings. */
+/** The start of today's business day and of the next one, as ISO instants (see core dates.ts). */
 export function todayRange(): { from: string; to: string } {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { from: start.toISOString(), to: end.toISOString() };
+  const today = localDate();
+  return { from: dayStartISO(today), to: dayEndISO(today) };
 }
 
-/** A local calendar day as YYYY-MM-DD. */
+/** A business day as YYYY-MM-DD, in the shop's time zone and with its day cut-off. */
 export function isoDay(d: Date = new Date()): string {
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
+  return localDate(d);
 }
 
 export function shiftDay(day: string, delta: number): string {
-  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
-  return isoDay(new Date(y, m - 1, d + delta));
+  return addDays(day, delta);
 }
 
 export const periods = {
   today: () => ({ from: isoDay(), to: isoDay() }),
   yesterday: () => ({ from: shiftDay(isoDay(), -1), to: shiftDay(isoDay(), -1) }),
   week: () => ({ from: shiftDay(isoDay(), -6), to: isoDay() }),
-  month: () => {
-    const n = new Date();
-    return { from: isoDay(new Date(n.getFullYear(), n.getMonth(), 1)), to: isoDay() };
-  },
+  month: () => ({ from: startOfMonth(isoDay()), to: isoDay() }),
   lastMonth: () => {
-    const n = new Date();
-    return {
-      from: isoDay(new Date(n.getFullYear(), n.getMonth() - 1, 1)),
-      to: isoDay(new Date(n.getFullYear(), n.getMonth(), 0)),
-    };
+    const lastDayPrev = shiftDay(startOfMonth(isoDay()), -1);
+    return { from: startOfMonth(lastDayPrev), to: lastDayPrev };
   },
 } as const;
 

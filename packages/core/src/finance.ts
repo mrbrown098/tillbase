@@ -1,5 +1,5 @@
 import type { Db } from "./db.js";
-import { assertDate, dayEndISO, dayStartISO, daysInclusive, eachDate, localDate } from "./dates.js";
+import { assertDate, dayEndISO, dayStartISO, daysInclusive, eachDate, localDate, wallClock } from "./dates.js";
 import { ExpenseService } from "./expenses.js";
 import { InventoryService, lossReasons } from "./inventory.js";
 import { LabourService } from "./labour.js";
@@ -147,7 +147,7 @@ export class FinanceService {
         day.cogsMinor += s.cogs;
         day.grossProfitMinor += net - s.cogs;
       }
-      const hour = new Date(s.at).getHours();
+      const hour = wallClock(s.at).hour;
       const h = hourMap.get(hour) ?? { orders: 0, salesMinor: 0 };
       h.orders += 1;
       h.salesMinor += net;

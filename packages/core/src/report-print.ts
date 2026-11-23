@@ -34,6 +34,8 @@ export interface ReportShop {
   logo: string;
   currency: string;
   locale: string;
+  /** The business time zone for printed times; empty means this machine's. */
+  timeZone?: string;
 }
 
 export interface ReportDocInput {
@@ -96,10 +98,14 @@ export function buildReportHtml(input: ReportDocInput, opts: { forPdf?: boolean 
   const money = (m: number) => formatMoney(m, shop.currency, shop.locale);
   const day = (d: string) => {
     const [y, m, dd] = d.split("-").map(Number) as [number, number, number];
-    return new Date(y, m - 1, dd).toLocaleDateString(shop.locale, { day: "numeric", month: "short", year: "numeric" });
+    return new Date(Date.UTC(y, m - 1, dd, 12)).toLocaleDateString(shop.locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   };
-  const stamp = (iso: string) => new Date(iso).toLocaleString(shop.locale, { dateStyle: "medium", timeStyle: "short" });
-  const dayOf = (iso: string) => new Date(iso).toLocaleDateString(shop.locale, { day: "numeric", month: "short" });
+  const stamp = (iso: string) => new Date(iso).toLocaleString(shop.locale, { dateStyle: "medium", timeStyle: "short", timeZone: shop.timeZone || undefined });
+  /** A business date (YYYY-MM-DD) as "10 Nov", the same in every time zone. */
+  const dayOf = (d: string) => {
+    const [y, m, dd] = d.split("-").map(Number) as [number, number, number];
+    return new Date(Date.UTC(y, m - 1, dd, 12)).toLocaleDateString(shop.locale, { day: "numeric", month: "short", timeZone: "UTC" });
+  };
   const pctText = (p: number | null) => (p === null ? "—" : `${p}%`);
 
   const td = (v: string, cls = "") => `<td${cls ? ` class="${cls}"` : ""}>${v}</td>`;
@@ -174,7 +180,7 @@ export function buildReportHtml(input: ReportDocInput, opts: { forPdf?: boolean 
       range = `${day(r.from)} to ${day(r.to)}`;
       body =
         salesSummary(r) +
-        section("Sales and gross profit by day", chart("Sales and gross profit (sales minus cost of goods) for each day", lineChart({ labels: r.pnl.daily.map((d) => dayOf(d.date + "T12:00:00")), series: [{ name: "Sales", values: r.pnl.daily.map((d) => d.salesMinor), color: chartColors.sales }, { name: "Gross profit", values: r.pnl.daily.map((d) => d.grossProfitMinor), color: chartColors.profit }], title: "Sales and gross profit by day", minor: true, unit: shop.currency })) + dailyTable(r)) +
+        section("Sales and gross profit by day", chart("Sales and gross profit (sales minus cost of goods) for each day", lineChart({ labels: r.pnl.daily.map((d) => dayOf(d.date)), series: [{ name: "Sales", values: r.pnl.daily.map((d) => d.salesMinor), color: chartColors.sales }, { name: "Gross profit", values: r.pnl.daily.map((d) => d.grossProfitMinor), color: chartColors.profit }], title: "Sales and gross profit by day", minor: true, unit: shop.currency })) + dailyTable(r)) +
         section("Payments", methods(r)) +
         section("Best sellers", topItems(r, false)) +
         notes(r.notes.filter((n) => !n.startsWith("Stock value, supplier")));
@@ -204,7 +210,7 @@ export function buildReportHtml(input: ReportDocInput, opts: { forPdf?: boolean 
             `</tbody></table><p class="range">Sales tax collected (${esc(money(p.taxCollectedMinor))}) belongs to the government and is not part of these figures.</p>`,
         ) +
         section("Where each part of the sales money went", chart("Cost of goods, wastage, wages, running costs and profit, as amounts", hBarChart({ rows: p.breakdown.map((b) => ({ label: b.label, value: b.amountMinor, display: `${money(b.amountMinor)}${b.pctOfSales === null ? "" : ` · ${b.pctOfSales}%`}` })), title: "Where the sales money went" }))) +
-        section("Sales and gross profit by day", chart("Gross profit does not include running costs or wages", lineChart({ labels: p.daily.map((d) => dayOf(d.date + "T12:00:00")), series: [{ name: "Sales", values: p.daily.map((d) => d.salesMinor), color: chartColors.sales }, { name: "Gross profit", values: p.daily.map((d) => d.grossProfitMinor), color: chartColors.profit }], title: "Sales and gross profit by day", minor: true, unit: shop.currency }))) +
+        section("Sales and gross profit by day", chart("Gross profit does not include running costs or wages", lineChart({ labels: p.daily.map((d) => dayOf(d.date)), series: [{ name: "Sales", values: p.daily.map((d) => d.salesMinor), color: chartColors.sales }, { name: "Gross profit", values: p.daily.map((d) => d.grossProfitMinor), color: chartColors.profit }], title: "Sales and gross profit by day", minor: true, unit: shop.currency }))) +
         notes(r.notes.filter((n) => !n.startsWith("Stock value, supplier")));
       break;
     }

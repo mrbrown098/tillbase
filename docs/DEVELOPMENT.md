@@ -87,6 +87,6 @@ read only by the main process and ignored in a packaged app.
 ## Known gaps worth fixing (from the project audit)
 
 - `stock_movements` has no index on `ref_id` or `created_at`: voids and the wastage report will slow down with years of data (add one in a new migration).
-- Tokens and "today" use the calendar day; a business-day cutoff hour is needed for places open past midnight.
+- Business days: `dates.ts` (core) holds one calendar (time zone + cut-off hour, set from the business profile at start-up and whenever it is saved). Every report range, "today", daily chart bucket and accountant export goes through `localDate`, `dayStartISO` and `dayEndISO`: a range is `start of the first day <= time < start of the day after the last`. Stored timestamps stay UTC and are never rewritten; daylight-saving days are 23 or 25 hours. Dates typed into `expenses.spent_on` and attendance days are business days too. Changing the time zone or cut-off re-files past sales under the new days (the sales themselves do not change).
 - A fresh install defaults to USD and never asks for a currency.
 - Backups are stored next to the database only.

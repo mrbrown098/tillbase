@@ -121,6 +121,12 @@ export function createHandlers(
   const customers = new CustomerService(db);
   const printerConfig = new PrinterConfigService(db);
   const business = new BusinessProfileService(db);
+  /** Every report, summary and date range follows the shop's time zone and the hour its business day starts. */
+  const applyCalendar = () => {
+    const p = business.get();
+    dates.setBusinessCalendar({ timeZone: p.timezone, cutoffHour: p.dayCutoffHour });
+  };
+  applyCalendar();
 
   let current: User | null = null;
   const needBackups = (): BackupManager => {
@@ -134,7 +140,7 @@ export function createHandlers(
     const needsCentre = req.kind !== "customer-statement" && req.kind !== "supplier-statement";
     authorize(req.kind === "customer-statement" ? "khata.use" : req.kind === "supplier-statement" ? "purchases.manage" : "finance.view");
     const s = settings.get();
-    const shop = { name: s.storeName, logo: s.businessLogo, currency: s.currency, locale: s.locale };
+    const shop = { name: s.storeName, logo: s.businessLogo, currency: s.currency, locale: s.locale, timeZone: dates.getBusinessCalendar().timeZone };
     const generatedAt = new Date(now()).toISOString();
     let from = req.from;
     let to = req.to;
@@ -1001,7 +1007,9 @@ export function createHandlers(
     },
     async saveBusinessProfile(patch) {
       authorize("settings.manage");
-      return business.save(patch);
+      const saved = business.save(patch);
+      applyCalendar();
+      return saved;
     },
     async beginOnboarding(name, pin) {
       if (users.count() > 0) throw new Error("Setup has already been completed");
@@ -1015,7 +1023,9 @@ export function createHandlers(
     },
     async finishOnboarding() {
       authorize("settings.manage");
-      return business.finish();
+      const done = business.finish();
+      applyCalendar();
+      return done;
     },
     async restartOnboarding() {
       authorize("settings.manage");

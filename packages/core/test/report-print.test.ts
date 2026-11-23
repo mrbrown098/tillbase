@@ -5,7 +5,7 @@ import {
 } from "../src/index.js";
 import { shop as buildShop } from "./report-fixture.js";
 
-const shopInfo: ReportShop = { name: "Bun & Co. Grill", logo: "", currency: "PKR", locale: "en-PK" };
+const shopInfo: ReportShop = { name: "Bun & Co. Grill", logo: "", currency: "PKR", locale: "en-PK", timeZone: "UTC" };
 const NOW = "2026-11-22T12:00:00.000Z";
 const count = (s: string, needle: string) => s.split(needle).length - 1;
 

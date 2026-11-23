@@ -30,6 +30,10 @@ A big usability release: a new Home screen and menu, shop logos, customer credit
 - Managers can write off what a customer owes, with a reason that stays on their statement. Voiding a sale on account takes it off what the customer owes.
 - Database migration 9 (credit limit and account entries on the customer ledger; migration 7 is the PIN length, migration 8 is supplier purchase orders).
 
+### Fixed
+
+- Reports, Home, the accountant export, charts and printed reports now follow the business time zone and day cut-off hour saved in the business profile (they used the machine's clock and midnight). Ranges are start-inclusive and end-exclusive, daylight-saving days are 23 or 25 hours, stored sale times are unchanged, and receipts print the shop's clock.
+
 ### Changed
 - "Powered by Tillbase" is now permanent on everything Tillbase prints (58 mm and 80 mm receipts, kitchen tickets, statements, A4 reports). The Settings switch for it is gone, and an old saved value is ignored. The shop's own receipt message is separate and unchanged.
 

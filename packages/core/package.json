@@ -27,6 +27,10 @@
       "types": "./dist/discount.d.ts",
       "default": "./dist/discount.js"
     },
+    "./dates": {
+      "types": "./dist/dates.d.ts",
+      "default": "./dist/dates.js"
+    },
     "./charts": {
       "types": "./dist/charts.d.ts",
       "default": "./dist/charts.js"

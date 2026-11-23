@@ -1,5 +1,6 @@
 import { formatMoney } from "./money.js";
 import { TILLBASE_FOOTER } from "./branding.js";
+import { wallClock } from "./dates.js";
 import type { Statement } from "./customers.js";
 import type { Sale } from "./sales.js";
 import type { KitchenTicket } from "./orders.js";
@@ -13,13 +14,11 @@ export interface ReceiptOptions {
   footer?: string;
 }
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
 
-/** "2026-11-18 17:25" in the machine's local time (stored times are UTC). */
+/** "2026-11-18 17:25" on the shop's clock (stored times are UTC). */
 function localStamp(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  if (Number.isNaN(new Date(iso).getTime())) return iso;
+  return wallClock(iso).stamp;
 }
 
 function row(left: string, right: string, width: number): string {

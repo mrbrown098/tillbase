@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { BusinessProfile, Permission, ShopSettings } from "@tillbase/core";
 import { formatMoney } from "@tillbase/core/money";
+import { setBusinessCalendar } from "@tillbase/core/dates";
 import type { SessionInfo } from "../../shared/api";
 import { api } from "./api";
 
@@ -44,11 +45,18 @@ export function useApp(): AppContextValue {
   return v;
 }
 
+/** The renderer's date helpers follow the same time zone and day cut-off as the reports (not a React hook). */
+function applyCalendar(p: BusinessProfile): void {
+  setBusinessCalendar({ timeZone: p.timezone, cutoffHour: p.dayCutoffHour });
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<ShopSettings>(defaults);
   const [session, setSession] = useState<SessionInfo>(signedOut);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [ready, setReady] = useState(false);
+  // Until the business profile is in, "today" would be worked out on the wrong clock.
+  const [calendarSet, setCalendarSet] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   useEffect(() => {
@@ -66,10 +74,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!userId) {
       setProfile(null);
+      setCalendarSet(true);
       return;
     }
-    api.getBusinessProfile().then(setProfile).catch(() => undefined);
+    setCalendarSet(false);
+    api
+      .getBusinessProfile()
+      .then((p) => {
+        applyCalendar(p);
+        setProfile(p);
+      })
+      .catch(() => undefined)
+      .finally(() => setCalendarSet(true));
   }, [userId]);
+
+  const saveProfile = useCallback((p: BusinessProfile) => {
+    applyCalendar(p);
+    setProfile(p);
+  }, []);
 
   const toast = useCallback((text: string, kind: "ok" | "error" = "ok") => {
     const id = Date.now() + Math.random();
@@ -87,10 +109,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [session.permissions],
   );
 
-  if (!ready) return null;
+  if (!ready || !calendarSet) return null;
 
   return (
-    <Ctx.Provider value={{ settings, setSettings, session, setSession, profile, setProfile, can, money, toast }}>
+    <Ctx.Provider value={{ settings, setSettings, session, setSession, profile, setProfile: saveProfile, can, money, toast }}>
       {children}
       <div className="toasts" role="status" aria-live="polite">
         {toasts.map((t) => (

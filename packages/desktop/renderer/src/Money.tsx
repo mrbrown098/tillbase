@@ -41,7 +41,7 @@ function Chart({ svg, caption }: { svg: string; caption?: string }) {
   );
 }
 
-const shortDay = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+const shortDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "UTC" });
 
 export function Money() {
   const { money, toast, settings } = useApp();

@@ -179,7 +179,7 @@ export function BusinessProfileSettings() {
           </select>
         </label>
       </div>
-      {cutoff > 0 && <p className="onb-note"><span className="onb-badge">Saved, not used by reports yet</span> Reports and Home still count midnight to midnight.</p>}
+      {cutoff > 0 && <p className="onb-note">Reports, Home and the accountant export count a sale made before {cutoff}:00 as the day before. Past sales keep their exact time.</p>}
       <label className="check">
         <input type="checkbox" checked={taxOn} onChange={(e) => setTaxOn(e.target.checked)} /> New items start with a tax rate I choose (Tillbase never picks one)
       </label>
