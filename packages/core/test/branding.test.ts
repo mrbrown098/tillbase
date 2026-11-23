@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { SettingsService, footerWithCredit, openDatabase } from "../src/index.js";
+import { SettingsService, openDatabase } from "../src/index.js";
 
 const tinyPng =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
-describe("shop logo and receipt credit settings", () => {
+describe("shop logo and footer settings", () => {
   it("keeps a valid logo, and removes it again with an empty string", () => {
     const s = new SettingsService(openDatabase(":memory:"));
     expect(s.get().businessLogo).toBe("");
@@ -22,13 +22,13 @@ describe("shop logo and receipt credit settings", () => {
     expect(s.get().businessLogo).toBe("");
   });
 
-  it("adds the Tillbase credit and copyright line under the footer unless it is switched off", () => {
-    const s = new SettingsService(openDatabase(":memory:"));
-    expect(s.get().showCredit).toBe(true);
-    const on = footerWithCredit(s.get(), 2026);
-    expect(on.split("\n")).toEqual(["Thank you!", "Powered by Tillbase (free POS)", "(c) 2026 Tillbase contributors"]);
-    s.update({ showCredit: false });
-    expect(s.get().showCredit).toBe(false);
-    expect(footerWithCredit(s.get(), 2026)).toBe("Thank you!");
+  it("has no setting for the Tillbase credit: an old showCredit value is ignored and the footer stays separate", () => {
+    const db = openDatabase(":memory:");
+    const s = new SettingsService(db);
+    expect("showCredit" in s.get()).toBe(false);
+    s.update({ receiptFooter: "See you soon" });
+    s.update({ showCredit: false } as never); // what an old screen might still send
+    expect(db.prepare("SELECT COUNT(*) AS n FROM settings WHERE key = 'showCredit'").get()).toEqual({ n: 0 });
+    expect(s.get().receiptFooter).toBe("See you soon");
   });
 });

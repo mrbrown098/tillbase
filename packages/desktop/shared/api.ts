@@ -33,6 +33,8 @@ import type {
   PayslipLineInput,
   PayrollPreviewLine,
   ProfitAndLoss,
+  ReportCentre,
+  ReportKind,
   Purchase,
   PurchaseInput,
   PurchaseOrder,
@@ -131,6 +133,18 @@ export interface ProductCsvReport {
  * `window.tillbase`. Every method rejects with a plain Error whose message is
  * safe to show to the cashier.
  */
+/**
+ * Which report to make. Daily uses the "to" day; monthly uses the whole calendar month that "to" falls in;
+ * the others use from..to. Statements also need a customer (customerId) or a supplier name.
+ */
+export interface ReportRequest {
+  kind: ReportKind;
+  from: string;
+  to: string;
+  customerId?: string;
+  supplier?: string;
+}
+
 export interface TillbaseApi {
   // Session (usable before signing in)
   session(): Promise<SessionInfo>;
@@ -256,6 +270,15 @@ export interface TillbaseApi {
 
   // Money: where it comes from and where it goes
   profitAndLoss(from: string, to: string): Promise<ProfitAndLoss>;
+
+  // Report centre (owner). Statements follow the permission of the screen they belong to.
+  reportCentre(from: string, to: string): Promise<ReportCentre>;
+  /** The A4 report as an HTML page, for the on-screen preview. */
+  reportHtml(request: ReportRequest): Promise<string>;
+  /** Makes the A4 PDF and opens it in the computer's PDF viewer, where it can be printed. Returns the file's name. */
+  printReport(request: ReportRequest): Promise<string>;
+  /** Makes the A4 PDF and asks where to save it. Null if cancelled. */
+  saveReportPdf(request: ReportRequest): Promise<string | null>;
   /** Save the five accountant CSV files for a date range into a folder the person picks. Null if they cancel. */
   exportAccounting(from: string, to: string): Promise<{ folder: string; names: string[] } | null>;
   backupNow(): Promise<string>;
@@ -345,7 +368,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "owingCustomers","customerStatement","customerStatementText","repayCustomer","setCreditLimit","writeOffCustomer",
   "listItems","getRecipe","setRecipe","recipeCosts",
   "recordPurchase","payPurchase","listPurchases","payables",
-  "createPurchaseOrder","listPurchaseOrders","receivePurchaseOrder","cancelPurchaseOrder","supplierNames","supplierStatement",
+  "createPurchaseOrder","listPurchaseOrders","receivePurchaseOrder","cancelPurchaseOrder","supplierNames","supplierStatement","reportCentre","reportHtml","printReport","saveReportPdf",
   "expenseCategories","addExpenseCategory","addExpense","voidExpense","listExpenses",
   "roster","clockIn","clockOut","attendance","addShiftRecord","removeShiftRecord",
   "listEmployees","createEmployee","updateEmployee","giveAdvance",

@@ -5,6 +5,9 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 ## [Unreleased]
 
 ### Added
+- **Reports** (the Money tab, owners only): Today, Yesterday, This week (Monday to today), This month or any dates. Sales, cost of goods, gross and net profit with every step of the calculation shown, payment methods, best sellers and slow movers, stock value and low stock, expenses by category, supplier and customer balances, and staff and shift performance. Charts for sales and gross profit over time, busy hours, payment methods, expenses, best sellers and stock. Everything comes from your own records; where a cost is missing or wages are estimated, the screen and the printout say so.
+- **A4 reports**: Daily and monthly sales, profit and loss, expenses, stock, product performance, staff and shifts, and customer and supplier statements. Preview them, **Print** (opens the A4 PDF in your PDF viewer) or **Save as PDF**. Each has the shop name and logo, the dates, when it was made, and "Powered by Tillbase" with the page number on every page.
+- Real-app check `scripts/e2e-reports.mjs` (also in CI): compares the sales figure on screen with the database, makes every report as a PDF and checks A4 size and the footer on each page.
 - Sponsor banner: one slim, clearly labelled line at the bottom of the Home screen, read from the public `ads/manifest.json`. Text and a small still picture only, never at checkout, payment or login, nothing about the shop is sent, and it disappears when offline or when there is no sponsor. Owners can turn it off in Settings (`TILLBASE_NO_ADS=1` turns it off for a whole machine). Outside ad networks stay disabled; see `docs/ADS-PROVIDERS.md`.
 - Update notice: the owner sees "Tillbase X is available" on Home when a newer stable release exists, with What is new, Remind me later and Update now (opens the official download page; nothing is installed silently and a sale is never interrupted). Settings shows the version and a Check for updates button. Works offline (it just shows nothing) and backs off if GitHub rate-limits.
 - Supplier orders: place an order with a supplier, receive it in one or several deliveries (each delivery is booked as a normal purchase, so stock, average cost and what you owe update), cancel it, and see a supplier statement of purchases and payments.
@@ -22,6 +25,9 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 - **Repayments.** Cashiers and managers can record money a customer pays back, by cash or card. Cash goes into the drawer count for the open shift, so the cash you expect stays right. A sale on account is counted as sales income but is never counted as cash or card received.
 - Managers can write off what a customer owes, with a reason that stays on their statement. Voiding a sale on account takes it off what the customer owes.
 - Database migration 9 (credit limit and account entries on the customer ledger; migration 7 is the PIN length, migration 8 is supplier purchase orders).
+
+### Changed
+- "Powered by Tillbase" is now permanent on everything Tillbase prints (58 mm and 80 mm receipts, kitchen tickets, statements, A4 reports). The Settings switch for it is gone, and an old saved value is ignored. The shop's own receipt message is separate and unchanged.
 
 ### Fixed
 - The sign-in screen now shows exactly as many empty boxes as your PIN has digits (so an 8-digit PIN shows 8 boxes) and signs you in on the last digit. Accounts made earlier learn their length the first time they sign in.

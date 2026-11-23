@@ -16,14 +16,19 @@ import {
   RecipeService,
   ProductService,
   ReportService,
+  ReportCentreService,
+  dates,
+  buildReportHtml,
+  reportTitles,
+  type ReportDocInput,
   SaleService,
   SettingsService,
   ShiftService,
   UserService,
   can,
   drawerKickJob,
-  footerWithCredit,
   formatKitchenTicket,
+  withTillbaseFooter,
   formatReceipt,
   formatStatement,
   kitchenTicketJob,
@@ -48,6 +53,7 @@ import type {
   PrintResult,
   ShiftSummaryView,
   TillbaseApi,
+  ReportRequest,
 } from "../shared/api.js";
 import type { AdView } from "./ads.js";
 import type { UpdateInfo } from "./updates.js";
@@ -82,6 +88,11 @@ export function createHandlers(
       decodeLogo?: DecodeFn;
     };
     /** Native file dialogs, supplied by the Electron main process. Each returns null if the person cancels. */
+    /** Turns an A4 report into a PDF and opens or saves it (Electron main process). */
+    reportOutput?: {
+      open: (name: string, html: string) => Promise<void>;
+      save: (name: string, html: string) => Promise<string | null>;
+    };
     files?: {
       openCsv: () => Promise<ProductCsvFile | null>;
       saveCsv: (suggestedName: string, text: string) => Promise<string | null>;
@@ -113,6 +124,37 @@ export function createHandlers(
   const needBackups = (): BackupManager => {
     if (!hooks.backups) throw new Error("Backups are not available here");
     return hooks.backups;
+  };
+
+  const reportCentre = new ReportCentreService(db, now);
+  /** Checks the permission, gathers the real figures, and returns a function that builds the A4 page. */
+  const reportDocument = (req: ReportRequest) => {
+    const needsCentre = req.kind !== "customer-statement" && req.kind !== "supplier-statement";
+    authorize(req.kind === "customer-statement" ? "khata.use" : req.kind === "supplier-statement" ? "purchases.manage" : "finance.view");
+    const s = settings.get();
+    const shop = { name: s.storeName, logo: s.businessLogo, currency: s.currency, locale: s.locale };
+    const generatedAt = new Date(now()).toISOString();
+    let from = req.from;
+    let to = req.to;
+    if (req.kind === "daily-sales") from = to;
+    if (req.kind === "monthly-sales") {
+      from = dates.startOfMonth(to);
+      to = dates.endOfMonth(to);
+    }
+    const input: ReportDocInput = { kind: req.kind, shop, generatedAt };
+    let tag = `${from}${to === from ? "" : `_to_${to}`}`;
+    if (needsCentre) input.centre = reportCentre.build(from, to);
+    else if (req.kind === "customer-statement") {
+      if (!req.customerId) throw new Error("Choose a customer");
+      input.customerStatement = customers.statement(req.customerId);
+      tag = input.customerStatement.customer.name;
+    } else {
+      if (!req.supplier) throw new Error("Choose a supplier");
+      input.supplierStatement = purchaseOrders.statement(req.supplier, { from: req.from, to: req.to });
+      tag = `${req.supplier}_${req.from}_to_${req.to}`;
+    }
+    const safe = `${reportTitles[req.kind]}_${tag}`.replace(/[^\p{L}\p{N}._-]+/gu, "_").replace(/_+/g, "_");
+    return { fileName: `${safe}.pdf`, html: (o?: { forPdf?: boolean }) => buildReportHtml(input, o) };
   };
 
   const publicUser = (u: User) => ({ id: u.id, name: u.name, role: u.role, pinLength: u.pinLength });
@@ -160,7 +202,7 @@ export function createHandlers(
       currency: s.currency,
       locale: s.locale,
       width: s.receiptWidth,
-      footer: footerWithCredit(s),
+      footer: s.receiptFooter,
     });
   };
 
@@ -524,7 +566,7 @@ export function createHandlers(
         currency: s.currency,
         locale: s.locale,
         width: width === 48 ? 48 : 32,
-        footer: footerWithCredit(s),
+        footer: s.receiptFooter,
       });
     },
     async repayCustomer(id, amountMinor, method, note) {
@@ -637,6 +679,26 @@ export function createHandlers(
     async supplierStatement(supplier, from, to) {
       authorize("purchases.manage");
       return purchaseOrders.statement(supplier, { from, to });
+    },
+
+    // ---- Report centre ----------------------------------------------------
+    async reportCentre(from, to) {
+      authorize("finance.view");
+      return reportCentre.build(from, to);
+    },
+    async reportHtml(request) {
+      return reportDocument(request).html();
+    },
+    async printReport(request) {
+      const doc = reportDocument(request);
+      if (!hooks.reportOutput) throw new Error("Printing reports is not available here");
+      await hooks.reportOutput.open(doc.fileName, doc.html({ forPdf: true }));
+      return doc.fileName;
+    },
+    async saveReportPdf(request) {
+      const doc = reportDocument(request);
+      if (!hooks.reportOutput) throw new Error("Saving reports is not available here");
+      return hooks.reportOutput.save(doc.fileName, doc.html({ forPdf: true }));
     },
 
     // ---- Running costs --------------------------------------------------
@@ -903,7 +965,7 @@ export function createHandlers(
       const st = customers.statement(customerId);
       const s = settings.get();
       return sendJob(
-        (o) => statementJob(formatStatement(st, { storeName: s.storeName, currency: s.currency, locale: s.locale, width: o.chars, footer: footerWithCredit(s) }), o),
+        (o) => statementJob(formatStatement(st, { storeName: s.storeName, currency: s.currency, locale: s.locale, width: o.chars, footer: s.receiptFooter }), o),
         { logo: true },
       );
     },
@@ -913,7 +975,7 @@ export function createHandlers(
       return sendJob(
         (o) => {
           const rule = "-".repeat(o.chars);
-          const text = [s.storeName.slice(0, o.chars), rule, "Printer test", `Paper: ${o.paper} mm (${o.chars} characters)`, "1234567890".repeat(5).slice(0, o.chars), rule, "If you can read this, printing works."].join("\n");
+          const text = withTillbaseFooter([s.storeName.slice(0, o.chars), rule, "Printer test", `Paper: ${o.paper} mm (${o.chars} characters)`, "1234567890".repeat(5).slice(0, o.chars), rule, "If you can read this, printing works."].join("\n"));
           return receiptJob(text, { ...o, openDrawer: !!openDrawer });
         },
         { logo: true },

@@ -5,6 +5,7 @@ import { BackupManager, openDatabase, SettingsService } from "@tillbase/core";
 import { channels, type IpcResult, type TillbaseApi } from "../shared/api.js";
 import { createAdService } from "./ads.js";
 import { createFileDialogs } from "./files.js";
+import { createReportOutput } from "./report-output.js";
 import { createUpdateChecker } from "./updates.js";
 import { createHandlers } from "./handlers.js";
 
@@ -80,6 +81,7 @@ void app.whenReady().then(() => {
   };
   quietBackup();
   const files = createFileDialogs(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
+  const reportOutput = createReportOutput(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
   const afterRestore = () => {
     // The old connection is closed and the files are swapped: start again on the restored data.
     app.relaunch();
@@ -91,7 +93,7 @@ void app.whenReady().then(() => {
   const ads = createAdService({ openExternal, enabled: () => settingsReader.get().showSponsors });
   const updates = createUpdateChecker({ currentVersion: app.getVersion(), openExternal });
   registerIpc(
-    createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, afterShiftClose: quietBackup, files, ads, updates, appVersion: app.getVersion() }),
+    createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, afterShiftClose: quietBackup, files, reportOutput, ads, updates, appVersion: app.getVersion() }),
   );
   createWindow();
 

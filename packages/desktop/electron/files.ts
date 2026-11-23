@@ -27,6 +27,7 @@ export function decodeCsv(bytes: Uint8Array): string {
  *   TILLBASE_TEST_CSV_SAVE=/path/out.csv   "Export" and "Download template" write to this file
  *   TILLBASE_TEST_BACKUP_FOLDER=/path/dir  "Choose a second backup place" picks this folder
  *   TILLBASE_TEST_EXPORT_FOLDER=/path/dir  "Export for your accountant" writes its files into this folder
+ *   TILLBASE_TEST_REPORT_FOLDER=/path/dir  report PDFs are written here instead of opening a viewer or a save window
  *
  * Safe by design: environment variables belong to the main process, so the page (renderer) cannot
  * set or change them, and they are ignored completely in an installed (packaged) app. When they are
@@ -34,7 +35,7 @@ export function decodeCsv(bytes: Uint8Array): string {
  * size, readable) still runs on the supplied path, so the test exercises the real code.
  */
 export function testPath(
-  name: "TILLBASE_TEST_CSV_OPEN" | "TILLBASE_TEST_CSV_SAVE" | "TILLBASE_TEST_EXPORT_FOLDER" | "TILLBASE_TEST_BACKUP_FOLDER",
+  name: "TILLBASE_TEST_CSV_OPEN" | "TILLBASE_TEST_CSV_SAVE" | "TILLBASE_TEST_EXPORT_FOLDER" | "TILLBASE_TEST_BACKUP_FOLDER" | "TILLBASE_TEST_REPORT_FOLDER",
   env: Record<string, string | undefined>,
   isPackaged: boolean,
 ): string | null {

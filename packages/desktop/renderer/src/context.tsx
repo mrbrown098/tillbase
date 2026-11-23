@@ -28,7 +28,6 @@ const defaults: ShopSettings = {
   receiptFooter: "Thank you!",
   receiptWidth: 32,
   businessLogo: "",
-  showCredit: true,
   showSponsors: true,
 };
 
