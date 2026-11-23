@@ -5,6 +5,7 @@ import {
   ExpenseService,
   FinanceService,
   InventoryService,
+  BusinessProfileService,
   LabourService,
   PAPER_CHARS,
   PrinterConfigService,
@@ -119,6 +120,7 @@ export function createHandlers(
   const productCsv = new ProductCsvService(db);
   const customers = new CustomerService(db);
   const printerConfig = new PrinterConfigService(db);
+  const business = new BusinessProfileService(db);
 
   let current: User | null = null;
   const needBackups = (): BackupManager => {
@@ -991,6 +993,33 @@ export function createHandlers(
       } catch (e) {
         return { status: "failed", message: e instanceof Error && e.message ? e.message : "The receipt printer did not answer." };
       }
+    },
+    // ---- First-run setup and the business profile -------------------------
+    async getBusinessProfile() {
+      authorize();
+      return business.get();
+    },
+    async saveBusinessProfile(patch) {
+      authorize("settings.manage");
+      return business.save(patch);
+    },
+    async beginOnboarding(name, pin) {
+      if (users.count() > 0) throw new Error("Setup has already been completed");
+      // One transaction: the owner exists only together with "setup has started", so closing the app now resumes the setup.
+      current = db.transaction(() => {
+        const owner = users.create({ name, pin, role: "owner" });
+        business.begin();
+        return owner;
+      })();
+      return sessionInfo();
+    },
+    async finishOnboarding() {
+      authorize("settings.manage");
+      return business.finish();
+    },
+    async restartOnboarding() {
+      authorize("settings.manage");
+      return business.restart();
     },
   };
 }

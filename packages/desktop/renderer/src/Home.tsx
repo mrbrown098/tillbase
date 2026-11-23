@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { homeShortcuts, isModuleShown, productsLabelFor } from "@tillbase/core/business";
 import type { LowStockItem, Payables, ProfitAndLoss, Sale, SalesSummary } from "@tillbase/core";
 import { api } from "./api";
 import { AdBanner } from "./AdBanner";
@@ -21,7 +22,7 @@ interface Data {
 
 /** The first screen: how today is going, what needs attention, and the quick ways in. */
 export function Home({ go }: Props) {
-  const { session, settings, can, money } = useApp();
+  const { session, settings, profile, can, money } = useApp();
   const [d, setD] = useState<Data | null>(null);
   const [error, setError] = useState("");
 
@@ -77,24 +78,52 @@ export function Home({ go }: Props) {
       )}
 
       <div className="quick">
-        <button className="quick-btn primary" onClick={() => go("checkout")}>
-          <strong>New sale</strong>
-          <span>Scan or tap items</span>
-        </button>
-        <button className="quick-btn" onClick={() => go("orders")}>
-          <strong>Orders</strong>
-          <span>{d ? `${d.open} open` : "Tables, takeaway, delivery"}</span>
-        </button>
-        <button className="quick-btn" onClick={() => go("kitchen")}>
-          <strong>Kitchen</strong>
-          <span>See what is cooking</span>
-        </button>
-        {can("customers.use") && (
-          <button className="quick-btn" onClick={() => go("customers")}>
-            <strong>Customers</strong>
-            <span>Points, credit, history</span>
-          </button>
-        )}
+        {(profile ? homeShortcuts(profile) : (["checkout", "orders", "kitchen", "customers"] as const)).map((id, i) => {
+          const primary = i === 0 ? " primary" : "";
+          if (id === "checkout")
+            return (
+              <button key={id} className={`quick-btn${primary}`} onClick={() => go("checkout")}>
+                <strong>New sale</strong>
+                <span>Scan or tap items</span>
+              </button>
+            );
+          if (id === "orders")
+            return (
+              <button key={id} className={`quick-btn${primary}`} onClick={() => go("orders")}>
+                <strong>Orders</strong>
+                <span>{d ? `${d.open} open` : "Tables, takeaway, delivery"}</span>
+              </button>
+            );
+          if (id === "kitchen")
+            return (
+              <button key={id} className={`quick-btn${primary}`} onClick={() => go("kitchen")}>
+                <strong>Kitchen</strong>
+                <span>See what is cooking</span>
+              </button>
+            );
+          if (id === "customers")
+            return can("customers.use") ? (
+              <button key={id} className={`quick-btn${primary}`} onClick={() => go("customers")}>
+                <strong>Customers</strong>
+                <span>Points, credit, history</span>
+              </button>
+            ) : null;
+          if (id === "products")
+            return can("products.manage") ? (
+              <button key={id} className={`quick-btn${primary}`} onClick={() => go("products")}>
+                <strong>{profile ? productsLabelFor(profile) : "Menu and stock"}</strong>
+                <span>Add items, check stock</span>
+              </button>
+            ) : null;
+          if (id === "purchases")
+            return can("purchases.manage") ? (
+              <button key={id} className={`quick-btn${primary}`} onClick={() => go("purchases")}>
+                <strong>Purchases</strong>
+                <span>Stock you buy, what you owe</span>
+              </button>
+            ) : null;
+          return null;
+        })}
       </div>
 
       <div className="stats">
@@ -114,7 +143,7 @@ export function Home({ go }: Props) {
             <span className="muted">after food cost, wages and running costs</span>
           </div>
         )}
-        {d && (
+        {d && (!profile || isModuleShown(profile, "orders")) && (
           <div className="stat">
             <div className="stat-label">Open orders</div>
             <div className="stat-value">{d.open}</div>

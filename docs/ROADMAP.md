@@ -10,7 +10,7 @@ Commercial POS products in Pakistan are sold as monthly subscriptions per branch
 |---|---|---|
 | Price | PKR 2,999 / 5,999 / 9,999 per month per branch | Free, MIT licensed |
 | Inventory, recipes, COGS | Growth plan and above | Included |
-| Kitchen display, HR/payroll, supplier ledger, financials | Pro plan only | Planned, included |
+| Kitchen display, HR/payroll, supplier ledger, financials | Pro plan only | Included (built; see below) |
 | Extra terminal / extra user beyond 5 | PKR 1,000 / PKR 500 per month each | Unlimited |
 | Tax-authority compliance | PKR 2,000 per month add-on | Planned, free (see the compliance note) |
 | Multi-branch | Listed as "coming soon" | Planned |
@@ -33,6 +33,11 @@ Source for the competitor facts: [pricing](https://www.granetpro.com/pricing.htm
 - [x] Khata: sell on account, credit limits, repayments through the shift, owes-you list and printable statements
 - [x] Customers with loyalty points and a prepaid wallet: phone search at the till and on orders, points earned per sale (rate set on the Customers screen) and used as a pre-tax discount, wallet top-up and spend, an append-only ledger that voids reverse, history and spend totals (owner only), points and wallet on the receipt
 - [x] CSV import and export of menu items, with a preview of every change before anything is saved (ingredients and recipes are not included)
+- [x] Supplier purchase orders: order, receive in one or several deliveries, booked as normal purchases at the agreed prices
+- [x] Export for your accountant: Excel-ready CSV files for any date range
+- [x] Backups to a second place (USB or synced folder) and checked restore
+- [x] Home screen and grouped menu, shop logo, "Powered by Tillbase" receipt line, PIN boxes that match the PIN length
+- [x] Sponsor line on Home (off unless a reviewed sponsor exists; owner can switch it off) and an update notice that opens the official download page. No outside ad network is enabled.
 - [x] Business suite, slice 1: ingredients and recipes with real cost of goods, purchases with weighted-average cost and supplier payables, wastage valued at cost, running costs, attendance and payroll (monthly, daily, hourly, overtime, advances), profit and loss with break-even and per-item margins, business payments from the till drawer, daily automatic backups
 
 ## Audit notes (November 2026)
@@ -48,7 +53,7 @@ Staff and shifts (done), menu CSV import and export (done). Next: first-run curr
 Delivery fees and splitting a bill by items are done. Still to do: floor plan, rider tracking, combos, kitchen stations, a customer-facing token screen.
 
 **Phase 4: back office** (recipes, costs, purchases, payroll and profit and loss are done)
-Still to do: purchase orders, expiry tracking, supplier ledger statements, recurring expenses, accountant export.
+Purchase orders and the accountant export are done. Still to do: expiry tracking, supplier ledger statements, recurring expenses.
 
 **Phase 5: more than one till and more than one shop**
 Several terminals on one local network, then multi-branch with sync when online, plus an owner dashboard.

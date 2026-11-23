@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Permission, ShopSettings } from "@tillbase/core";
+import type { BusinessProfile, Permission, ShopSettings } from "@tillbase/core";
 import { formatMoney } from "@tillbase/core/money";
 import type { SessionInfo } from "../../shared/api";
 import { api } from "./api";
@@ -15,6 +15,9 @@ interface AppContextValue {
   setSettings: (s: ShopSettings) => void;
   session: SessionInfo;
   setSession: (s: SessionInfo) => void;
+  /** The business profile (what kind of business, which parts of the menu show). Null until the signed-in user's profile has loaded. */
+  profile: BusinessProfile | null;
+  setProfile: (p: BusinessProfile) => void;
   /** Whether the signed-in user may do something. The main process enforces this too. */
   can: (permission: Permission) => boolean;
   money: (minor: number) => string;
@@ -44,6 +47,7 @@ export function useApp(): AppContextValue {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<ShopSettings>(defaults);
   const [session, setSession] = useState<SessionInfo>(signedOut);
+  const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -56,6 +60,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined)
       .finally(() => setReady(true));
   }, []);
+
+  // The profile is read once someone is signed in (the menu and Home follow it).
+  const userId = session.user?.id ?? null;
+  useEffect(() => {
+    if (!userId) {
+      setProfile(null);
+      return;
+    }
+    api.getBusinessProfile().then(setProfile).catch(() => undefined);
+  }, [userId]);
 
   const toast = useCallback((text: string, kind: "ok" | "error" = "ok") => {
     const id = Date.now() + Math.random();
@@ -76,7 +90,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   if (!ready) return null;
 
   return (
-    <Ctx.Provider value={{ settings, setSettings, session, setSession, can, money, toast }}>
+    <Ctx.Provider value={{ settings, setSettings, session, setSession, profile, setProfile, can, money, toast }}>
       {children}
       <div className="toasts" role="status" aria-live="polite">
         {toasts.map((t) => (

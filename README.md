@@ -20,7 +20,7 @@ No subscription. No per-user fees. No internet needed.
 
 </div>
 
-> **Status: early development (v0.4).** Everything listed under "What it does" is built and tested. **Tillbase is not yet approved for FBR, PRA or SRB tax-authority integration.** Do not rely on it for tax filing until that exists.
+> **Status: early but usable (v0.6).** Everything listed under "What it does" is built and tested. Pharmacy-specific features (batches, expiry blocking, prescriptions) are **not built yet**. **Tillbase is not yet approved for FBR, PRA or SRB tax-authority integration.** Do not rely on it for tax filing until that exists.
 
 ## Why Tillbase
 
@@ -44,6 +44,8 @@ See an honest side-by-side with other free and paid systems in **[docs/COMPARISO
 2. Each release lists SHA-256 checksums so you can check the download.
 3. The installers are not code-signed yet (signing certificates cost money, see [Support the project](#support-the-project)). Windows shows "unknown publisher": choose **More info, then Run anyway**. On macOS, right-click the app and choose **Open** the first time.
 
+**Updating:** install the newer version over the old one; your data is kept. The app tells the owner when a newer stable release exists (it opens this page, nothing installs by itself).
+
 Prefer to build it yourself? See [Quick start](#quick-start).
 
 ## What it does
@@ -60,6 +62,8 @@ Prefer to build it yourself? See [Quick start](#quick-start).
 - **Customers and loyalty:** find a customer by phone number at the till or on an order (or add one on the spot), points earned on every sale at a rate you set (default 1 point per 100.00), points used as a discount, and a prepaid wallet. History, points and wallet are on the Customers screen; the receipt shows points used, points earned and balances. Delivery orders fill in the address from the customer.
 - **Orders** for fast-food and restaurants: a token number that restarts each day, dine-in, takeaway and delivery, table or customer details, add-ons such as extra cheese (with their own price and ingredient cost), several orders held open at once, paid in one tap. Delivery orders can carry a delivery charge, which is shown before payment and counted as income. A dine-in group can **split the bill by items** into separate bills, each with its own token, and pay separately. Every edit is saved immediately.
 - **Kitchen** board and tickets: only new items are sent; orders move new, preparing, ready, served; late orders turn red. Only a manager can change or cancel food already in the kitchen.
+- **Customer credit (khata):** sell on account with a credit limit, record repayments (cash goes into the drawer count), see who owes you, print statements, write off with a reason.
+- **Receipt printing:** direct ESC/POS printing to a network thermal printer (58/80 mm) for receipts, kitchen tickets and statements, with the shop logo and a cash drawer kick. Browser printing still works.
 - **Sales:** today's totals by payment method, top products, recent sales, reprint, void (stock is restored exactly).
 
 **Knowing your numbers**
@@ -71,7 +75,9 @@ Prefer to build it yourself? See [Quick start](#quick-start).
 *The pictures are real screenshots of a made-up demo shop, taken by `npm run screenshots`.*
 
 - **Menu and stock:** menu items and ingredients with units. A recipe gives each dish a real cost from what you actually paid (weighted-average cost), and selling a dish uses up its ingredients. Food-cost percentage and margin per item. Low-stock warnings.
-- **Purchases:** record what you buy and what you still owe each supplier, and pay it down later.
+- **Purchases and supplier orders:** record what you buy and what you owe each supplier, and pay it down later. Place an order with a supplier and receive it in one or several deliveries at the agreed prices; each delivery books stock and what you owe.
+- **Home:** a daily overview for owners and managers: today's sales and profit, open orders, low stock, latest sales and one-tap shortcuts.
+- **Accountant export:** Excel-ready CSV files for any date range (owner only).
 - **Running costs:** rent, electricity, gas and more, in categories you can extend. Wastage (waste, spoilage, expiry, damage) is valued at cost.
 - **Team and wages:** clock in and out; monthly, daily or hourly pay with overtime; advances recovered at payroll; payslips paid from the till drawer if you like.
 - **Money (owner only):** profit or loss, where every rupee of sales went (ingredients, waste, wages, running costs, profit), break-even sales, per-item margins, busy hours, stock value and what you owe.
@@ -80,7 +86,7 @@ Prefer to build it yourself? See [Quick start](#quick-start).
 **Running the shop safely**
 - **Staff and roles:** PIN login with owner, manager and cashier roles. Permissions are enforced in the app's main process, not just hidden in the screen. PINs are salted hashes, wrong PINs lock the account for 30 seconds, and the till signs out after 5 idle minutes. Profit and payroll are owner-only.
 - **Shifts:** open with a cash float, record cash in and out, count the drawer blind at close, see short, over or exact. Business payments taken from the drawer are counted.
-- **Backups:** a daily copy of your data, and another after each shift closes. The newest 14 are kept next to the database.
+- **Backups:** a daily copy of your data, and another after each shift closes (the newest 14 are kept next to the database). Choose a second place such as a USB drive or a synced folder, and restore from a checked backup on the Backups screen.
 - **Settings:** store name, currency, number format, receipt width and footer.
 
 ## Quick start
@@ -142,21 +148,20 @@ Amounts are in minor units and tax rates in basis points: `1800` means 18.00%.
 - [x] Fast-food orders, add-ons, delivery fees, split bills, kitchen board
 - [x] Menu CSV import and export; daily backups
 - [x] Customers, loyalty points and a wallet
+- [x] Customer credit (khata), direct thermal printing, supplier purchase orders
+- [x] Accountant export, second-place backups and restore
+- [x] Home screen, shop logo, sponsor line and update notice
 - [x] Installers for Windows, macOS and Linux; tests on all three
 
-**In review now** (open pull requests)
-- [ ] Sponsor banner and update notice
-- [ ] Accountant export (Excel-ready CSV files)
-- [ ] Second-place backups and restore
-
 **Next**
-- [ ] First-run setup: country and currency, business mode, business-day cutoff
-- [ ] Customer credit (khata): sell on account, record repayments
-- [ ] Direct thermal printing and cash drawer; shift Z-report
-- [ ] Supplier purchase orders
+- [ ] First-run setup and onboarding: owner account, business type and business profiles (retail, restaurant, fast food, custom)
+- [ ] Owner analytics: charts, date filters, A4 report printing
+- [ ] Pharmacy workflows: batches and expiry tracking, expired-stock blocking, prescription records (not started)
+- [ ] Country and currency setup, business-day cutoff
+- [ ] Returns and a shift Z-report
 - [ ] Urdu interface and receipts
-- [ ] Signed installers and auto-update
-- [ ] Several terminals on one network, then multi-branch sync
+- [ ] Signed installers and in-app auto-update
+- [ ] Several terminals on one network, then optional encrypted online access ([design](docs/ONLINE-ACCESS.md))
 
 Full detail in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -198,7 +203,7 @@ Be honest in code and in the UI: do not claim tax-authority approval, and do not
 Tillbase has no company behind it and no investors. It runs on volunteer time and free tools. If it helps your shop, you can help it stay free:
 
 - **Sponsor or donate:** see the *Sponsor* button at the top of this repository.
-- **Sponsor a banner:** a small clearly labelled banner can run on a few non-critical screens (never checkout, payment or login). No tracking, no scripts, no adult, gambling or alcohol ads. Rules and how to apply are in [`ads/README.md`](ads/README.md); how outside ad networks are judged is in [docs/ADS-PROVIDERS.md](docs/ADS-PROVIDERS.md). Owners can switch the banner off in Settings.
+- **Sponsor a banner:** a small clearly labelled banner can run on a few non-critical screens (never checkout, payment or login). No tracking, no scripts, no adult, gambling or alcohol ads. The banner is clearly labelled and shown on Home only. Rules and how to apply are in [`ads/README.md`](ads/README.md); how outside ad networks are judged is in [docs/ADS-PROVIDERS.md](docs/ADS-PROVIDERS.md). Owners can switch the banner off in Settings.
 - **Contribute:** code, translations (Urdu first), testing in a real shop, or bug reports all count.
 
 Money raised goes first to a code-signing certificate (removes the "unknown publisher" warning), then a website and download hosting.

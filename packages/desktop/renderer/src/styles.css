@@ -1235,3 +1235,52 @@ tr.inactive td {
   font: inherit;
   font-size: 0.82rem;
 }
+
+/* First-run setup */
+.onb-splash { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 6px; text-align: center; background: var(--bg); color: var(--text); cursor: pointer; outline: none; }
+.onb-splash h1 { font-size: 2.4rem; margin: 10px 0 0; letter-spacing: -0.02em; }
+.onb-splash p { color: var(--muted); margin: 0; }
+.onb-splash-mark { animation: onb-pop 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.onb-splash h1, .onb-splash p { animation: onb-fade 900ms 250ms ease both; }
+@keyframes onb-pop { from { opacity: 0; transform: scale(0.7); } to { opacity: 1; transform: scale(1); } }
+@keyframes onb-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .onb-splash-mark, .onb-splash h1, .onb-splash p { animation: none; } }
+.onb-card { width: min(520px, 100%); }
+.onb-card.onb-wide { width: min(760px, 100%); max-height: calc(100vh - 48px); overflow: auto; }
+.onb-points { padding-left: 18px; margin: 12px 0 4px; color: var(--muted); }
+.onb-points li { margin: 6px 0; }
+.onb-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.onb-head h1 { margin: 0; font-size: 1.35rem; }
+.onb-head p { margin: 0; }
+.onb-bar { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 16px; }
+.onb-bar span { display: block; height: 100%; background: var(--accent); transition: width 200ms ease; }
+.onb-body textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; width: 100%; resize: vertical; }
+.onb-nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; }
+.onb-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.onb-types { display: grid; gap: 10px; margin: 12px 0; }
+.onb-type { display: grid; gap: 2px; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); cursor: pointer; font: inherit; }
+.onb-type span { color: var(--muted); font-size: 0.9rem; }
+.onb-type.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+.onb-type:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.onb-note { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin: 10px 0; font-size: 0.92rem; }
+.onb-note.warn { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.onb-badge { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); margin-right: 6px; font-style: normal; }
+.onb-set { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; margin: 12px 0; }
+.onb-set legend { padding: 0 6px; font-weight: 600; }
+.onb-set .check { margin: 8px 0; align-items: flex-start; }
+.onb-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+@media (max-width: 640px) { .onb-lists { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } }
+.onb-lists h4 { margin: 0 0 6px; }
+.onb-lists ul { margin: 0; padding-left: 18px; font-size: 0.9rem; }
+.onb-lists li { margin: 4px 0; }
+.onb-lists .not-yet { color: var(--muted); }
+.onb-h3 { margin: 4px 0 6px; }
+.onb-people { list-style: none; padding: 0; margin: 8px 0; }
+.onb-people li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.onb-review { margin: 8px 0; }
+.onb-review > div { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.onb-review dt { color: var(--muted); }
+.onb-review dd { margin: 0; overflow-wrap: anywhere; }
+.login-card .onb-head .mark { margin: 0; flex: none; }
+.login-card .onb-head h1 { text-align: left; }
+.onb-body p { text-align: left; }
