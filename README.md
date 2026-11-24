@@ -30,7 +30,7 @@ Paid POS systems charge every month for a till, a few reports and the right to k
 |---|---|
 | **Truly free** | MIT licensed. No subscription, no setup fee, no limit on terminals, staff or items. Nothing is locked behind a paid tier. |
 | **A whole business suite** | Checkout, restaurant orders and kitchen, recipes and real food cost, purchases and suppliers, running costs, wages, profit and loss. |
-| **Any kind of shop** | Grocery, clothes, pharmacy, cafe or fast food: one engine. Retail uses checkout and stock; food adds recipes, orders and the kitchen. |
+| **Any kind of shop** | Grocery, clothes, cafe or fast food: one engine. Retail uses checkout and stock; food adds recipes, orders and the kitchen. Pharmacy is a starting point only (see Roadmap). |
 | **Your data is yours** | One SQLite file on your own computer with automatic backups. No account, no cloud, no one else reading your sales. |
 | **Works offline** | An internet outage never stops a sale. |
 | **Numbers you can trust** | Money is whole paisa or cents, never decimals that drift. Stock is a log, never an overwritten number. A sale is one database transaction. If a figure may be wrong, the screen says so. |
@@ -49,6 +49,10 @@ See an honest side-by-side with other free and paid systems in **[docs/COMPARISO
 Prefer to build it yourself? See [Quick start](#quick-start).
 
 ## What it does
+
+**Getting started**
+
+- **First-run setup and business profiles:** a guided setup for a new installation (resumable if interrupted), with profiles for Retail (grocery, general, clothing), Restaurant, Fast food, Pharmacy and Custom. The profile decides which menu parts, order types and Home shortcuts are shown; the owner can change it later in Settings. **Pharmacy is a starting point only:** no batches, expiry tracking, expired-stock blocking or prescription records yet. Shops that already use Tillbase are not sent through setup.
 
 **Selling**
 
@@ -100,7 +104,7 @@ npm install
 npm run app        # prepares SQLite for Electron, builds everything, opens the app
 ```
 
-The first run takes a minute, then Tillbase asks you to create the owner account. If it does not start, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+The first run takes a minute, then Tillbase walks you through setup: the owner account, country and currency, the kind of business, shop details, tax and your first staff. If it does not start, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ### Running the tests
 
@@ -151,13 +155,13 @@ Amounts are in minor units and tax rates in basis points: `1800` means 18.00%.
 - [x] Customer credit (khata), direct thermal printing, supplier purchase orders
 - [x] Accountant export, second-place backups and restore
 - [x] Home screen, shop logo, sponsor line and update notice
+- [x] First-run setup and business profiles (Retail, Restaurant, Fast food, Custom; Pharmacy as a starting point only)
 - [x] Installers for Windows, macOS and Linux; tests on all three
 
 **Next**
-- [ ] First-run setup and onboarding: owner account, business type and business profiles (retail, restaurant, fast food, custom)
 - [ ] Owner analytics: charts, date filters, A4 report printing
 - [ ] Pharmacy workflows: batches and expiry tracking, expired-stock blocking, prescription records (not started)
-- [ ] Country and currency setup, business-day cutoff
+- [ ] Business-day cutoff applied to Home and reports (the setup answer is saved but not used yet)
 - [ ] Returns and a shift Z-report
 - [ ] Urdu interface and receipts
 - [ ] Signed installers and in-app auto-update
