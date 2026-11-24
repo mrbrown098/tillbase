@@ -144,3 +144,14 @@ Not covered by any automated check:
 - Uninstalling, and upgrading over an older version.
 - Other Linux distributions than the Ubuntu runner. The AppImage is expected to work on most distributions, but only Ubuntu is tested.
 - Printing, barcode scanners and any other hardware.
+
+## Cutting a release without a terminal
+
+If you cannot push a tag yourself, use the **Create release tag** workflow instead:
+
+1. Merge everything the release needs, set the version in all three `package.json` files, and wait for CI on `main` to pass.
+2. On GitHub open **Actions**, choose **Create release tag**, tap **Run workflow** on the `main` branch, and enter the version (for example `0.6.0`) and the full 40-character SHA of the `main` commit you checked.
+3. The workflow stops without tagging unless main is at that exact commit, every `package.json` says that version, and the tag does not exist. It then creates the annotated tag and starts the **Release** workflow on it, which builds the installers and makes the usual DRAFT release. Nothing is published.
+4. Check the draft, then publish it yourself.
+
+Only the repository owner can run it. It never moves or deletes a tag.
