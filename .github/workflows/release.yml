@@ -15,7 +15,7 @@ jobs:
     name: Check tag matches version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Tag must equal the version in every package.json
         run: |
           tag="${GITHUB_REF_NAME}"
@@ -40,7 +40,7 @@ jobs:
     permissions:
       contents: write # needed to create the release
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: installers-*
           merge-multiple: true

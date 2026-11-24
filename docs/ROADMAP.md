@@ -33,6 +33,7 @@ Source for the competitor facts: [pricing](https://www.granetpro.com/pricing.htm
 - [x] Khata: sell on account, credit limits, repayments through the shift, owes-you list and printable statements
 - [x] Customers with loyalty points and a prepaid wallet: phone search at the till and on orders, points earned per sale (rate set on the Customers screen) and used as a pre-tax discount, wallet top-up and spend, an append-only ledger that voids reverse, history and spend totals (owner only), points and wallet on the receipt
 - [x] CSV import and export of menu items, with a preview of every change before anything is saved (ingredients and recipes are not included)
+- [x] First-run setup wizard (resumable) and business profiles: Retail (grocery, general, clothing), Restaurant, Fast food, Custom; the profile decides which parts are shown. Pharmacy is a starting point only: no batches, expiry tracking, expired-stock blocking, prescription records or controlled-medicine register
 - [x] Supplier purchase orders: order, receive in one or several deliveries, booked as normal purchases at the agreed prices
 - [x] Export for your accountant: Excel-ready CSV files for any date range
 - [x] Backups to a second place (USB or synced folder) and checked restore
@@ -47,7 +48,7 @@ A full review of the code found no security or correctness blockers: 0 known vul
 ## Planned phases
 
 **Phase 2: run a real shop day** (in progress)
-Staff and shifts (done), menu CSV import and export (done). Next: first-run currency and country, business-day cutoff so after-midnight sales belong to the right day, dual tax rates for cash and card.
+Staff and shifts (done), menu CSV import and export (done), first-run setup with country, currency and business profiles (done). Next: apply the business-day cutoff (the setup answer is saved, but Home and reports still count calendar days) so after-midnight sales belong to the right day, dual tax rates for cash and card.
 
 **Phase 3: restaurants** (fast-food billing done: daily tokens, dine-in/takeaway/delivery, delivery fees, held orders, add-ons with cost, send-to-kitchen tickets, kitchen board, split bills)
 Delivery fees and splitting a bill by items are done. Still to do: floor plan, rider tracking, combos, kitchen stations, a customer-facing token screen.

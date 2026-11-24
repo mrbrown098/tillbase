@@ -23,8 +23,8 @@ jobs:
     name: Lockfile has no git dependencies
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # npm 11 refuses git dependencies (EALLOWGIT), and a git+ssh URL fails for anyone without a GitHub SSH key.
@@ -43,8 +43,8 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node: [22, 24]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           # No `cache: npm`: a fresh machine has nothing cached.
@@ -77,7 +77,7 @@ jobs:
         run: node scripts/smoke.mjs --dev --shots smoke-output
       - name: Save screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fresh-clone-screenshots-${{ runner.os }}-node${{ matrix.node }}
           path: smoke-output/
@@ -98,8 +98,8 @@ jobs:
           - { os: windows-latest, node: 22 }
           - { os: macos-latest, node: 22 }
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -119,8 +119,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -144,7 +144,7 @@ jobs:
         run: node scripts/e2e-purchase-orders.mjs --shots smoke-output
       - name: Save screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-screenshots-${{ runner.os }}
           path: smoke-output/
