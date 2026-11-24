@@ -2,7 +2,7 @@
 
 Status: **proposal for owner approval. Nothing in this document is built, except model A.** Do not describe B, C or D as available in the README, release notes or the app until the acceptance criteria in section 9 are met and tested.
 
-This document replaces nothing. [ONLINE-ACCESS.md](ONLINE-ACCESS.md) is an earlier sketch of one possible cloud design (client-side encrypted storage on a free hosting tier). Section 8 explains how it fits.
+This document replaces nothing. The screens, settings and warnings for choosing a mode are proposed in DEPLOYMENT-MODES.md (modes 1 to 4 there are models A to D here). [ONLINE-ACCESS.md](ONLINE-ACCESS.md) is an earlier sketch of one possible cloud design (client-side encrypted storage on a free hosting tier). Section 8 explains how it fits.
 
 ## 1. Goals and non-goals
 
@@ -51,7 +51,7 @@ Topology: the owner's computer runs Tillbase and also serves a web interface on 
 Security boundary: the shop network. It is **not** safe to assume the LAN is trusted (guest Wi-Fi, a compromised phone, a neighbour on shared Wi-Fi).
 - Off by default; the owner turns it on and sees the address and a pairing code.
 - Each device is paired once (owner approves it); staff then sign in with their PIN. Wrong-PIN lockout applies per account and per device.
-- TLS on the LAN: browsers treat plain HTTP as insecure and some features (camera, installable web app) require HTTPS. Options to decide: a per-shop local certificate authority the owner installs on devices, or plain HTTP limited to the LAN with the owner warned. This is an open decision (section 10).
+- TLS on the LAN. Browsers treat a page served over plain HTTP, or from a bare LAN address with an untrusted certificate, as not a "secure context". The pages still load, but the browser switches off camera access (so no barcode scanning with a phone camera) and installing the page as an app, and anyone on the Wi-Fi could read the traffic. A browser cannot pin a certificate, so "trust the first one you see" is not an option for phones; the desktop app can pin, a browser cannot. Three options, none decided: (1) a certificate from a public authority for a name the shop owns that points to the server's private address (needs a domain and a DNS-based certificate request); (2) a certificate authority made for the shop and installed on each device (the steps differ on every phone, and the owner must protect its key); (3) plain HTTP on the LAN with a clear warning and no camera scanning. Until one is chosen, browser access to a local server must not be described as secure.
 - Bind to private addresses only; refuse requests that arrive via a public address or a proxy header the owner did not configure.
 - Permissions: identical to today, enforced by the server for every request.
 
@@ -161,7 +161,7 @@ Each phase ships on its own, is optional for the shop, and leaves model A untouc
 ## 10. Decisions needed from the owner
 
 1. Approve this phasing, or change the order (for example, is model B or model C more valuable first?).
-2. LAN TLS: local certificate authority per shop, or plain HTTP on the LAN with an explicit warning.
+2. LAN TLS for browsers: a public-authority certificate for a shop-owned name, a per-shop certificate authority, or plain HTTP with a warning (see model B).
 3. Whether PostgreSQL is wanted at all in the first versions (recommended: no, until a customer needs it).
 4. Whether the project will ever offer a hosted option, or only self-hosting (this spec assumes self-hosting only).
 5. Whether to mark `ONLINE-ACCESS.md` as superseded (recommended).
