@@ -6,6 +6,9 @@
 
 export const chartColors = { sales: "#1d4ed8", profit: "#15803d", cost: "#b45309", muted: "#6b7280", grid: "#d1d5db", ink: "#111827" };
 
+/** A colour that is safe to put in an SVG attribute: a hex value only. Anything else falls back to a neutral grey. */
+export const safeColor = (c: string, fallback: string = chartColors.muted): string => (/^#[0-9a-fA-F]{3,8}$/.test(c) ? c : fallback);
+
 export const esc = (s: string | number): string =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
@@ -57,7 +60,7 @@ function legend(series: Series[], y: number): string {
   let x = 48;
   return series
     .map((s) => {
-      const out = `<rect x="${x}" y="${y - 9}" width="12" height="12" fill="${s.color}"/><text x="${x + 17}" y="${y + 1}" ${FONT} font-size="12" fill="${chartColors.ink}">${esc(s.name)}</text>`;
+      const out = `<rect x="${x}" y="${y - 9}" width="12" height="12" fill="${safeColor(s.color)}"/><text x="${x + 17}" y="${y + 1}" ${FONT} font-size="12" fill="${chartColors.ink}">${esc(s.name)}</text>`;
       x += 30 + s.name.length * 7;
       return out;
     })
@@ -105,7 +108,7 @@ export function barChart(opts: { labels: string[]; series: Series[]; title: stri
       const x = cx - (bw * series.length) / 2 + bw * k;
       const yy = y(v);
       const h = Math.abs(zero - yy);
-      out.push(`<rect x="${x.toFixed(1)}" y="${Math.min(yy, zero).toFixed(1)}" width="${(bw - 1).toFixed(1)}" height="${Math.max(h, v === 0 ? 0 : 1).toFixed(1)}" fill="${s.color}"><title>${esc(`${label} · ${s.name}: ${compact(v / div)}`)}</title></rect>`);
+      out.push(`<rect x="${x.toFixed(1)}" y="${Math.min(yy, zero).toFixed(1)}" width="${(bw - 1).toFixed(1)}" height="${Math.max(h, v === 0 ? 0 : 1).toFixed(1)}" fill="${safeColor(s.color)}"><title>${esc(`${label} · ${s.name}: ${compact(v / div)}`)}</title></rect>`);
       if (showValues && v !== 0) out.push(`<text x="${(x + bw / 2).toFixed(1)}" y="${(v >= 0 ? yy - 4 : yy + 12).toFixed(1)}" text-anchor="middle" ${FONT} font-size="10" fill="${chartColors.ink}">${esc(compact(v / div))}</text>`);
     });
     if (i % every === 0) out.push(`<text x="${cx.toFixed(1)}" y="${H - 14}" text-anchor="middle" ${FONT} font-size="11" fill="${chartColors.muted}">${esc(label)}</text>`);
@@ -144,8 +147,8 @@ export function lineChart(opts: { labels: string[]; series: Series[]; title: str
   series.forEach((s, k) => {
     const dash = k === 1 ? ` stroke-dasharray="6 3"` : ""; // the second line is dashed so it reads in black and white
     const pts = s.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-    if (n > 1) out.push(`<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.5"${dash}/>`);
-    s.values.forEach((v, i) => out.push(`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${n > 31 ? 0 : 3}" fill="${s.color}"><title>${esc(`${labels[i]} · ${s.name}: ${compact(v / div)}`)}</title></circle>`));
+    if (n > 1) out.push(`<polyline points="${pts}" fill="none" stroke="${safeColor(s.color)}" stroke-width="2.5"${dash}/>`);
+    s.values.forEach((v, i) => out.push(`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${n > 31 ? 0 : 3}" fill="${safeColor(s.color)}"><title>${esc(`${labels[i]} · ${s.name}: ${compact(v / div)}`)}</title></circle>`));
   });
   const unit = opts.unit ? `<text x="${left}" y="12" ${FONT} font-size="11" fill="${chartColors.muted}">${esc(opts.unit)}</text>` : "";
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.title)}" xmlns="http://www.w3.org/2000/svg">${unit}${legend(series, 28)}${out.join("")}</svg>`;
@@ -165,7 +168,7 @@ export function hBarChart(opts: { rows: { label: string; value: number; display:
     const y = 4 + i * rowH;
     const w = Math.max(2, (Math.abs(r.value) / max) * barMax);
     const label = r.label.length > 32 ? `${r.label.slice(0, 31)}…` : r.label;
-    return `<text x="${labelW - 8}" y="${y + 16}" text-anchor="end" ${FONT} font-size="12" fill="${chartColors.ink}">${esc(label)}</text><rect x="${labelW}" y="${y + 4}" width="${w.toFixed(1)}" height="16" fill="${opts.color ?? chartColors.sales}"><title>${esc(`${r.label}: ${r.display}`)}</title></rect><text x="${(labelW + w + 6).toFixed(1)}" y="${y + 16}" ${FONT} font-size="12" fill="${chartColors.ink}">${esc(r.display)}</text>`;
+    return `<text x="${labelW - 8}" y="${y + 16}" text-anchor="end" ${FONT} font-size="12" fill="${chartColors.ink}">${esc(label)}</text><rect x="${labelW}" y="${y + 4}" width="${w.toFixed(1)}" height="16" fill="${safeColor(opts.color ?? chartColors.sales)}"><title>${esc(`${r.label}: ${r.display}`)}</title></rect><text x="${(labelW + w + 6).toFixed(1)}" y="${y + 16}" ${FONT} font-size="12" fill="${chartColors.ink}">${esc(r.display)}</text>`;
   });
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.title)}" xmlns="http://www.w3.org/2000/svg">${out.join("")}</svg>`;
 }

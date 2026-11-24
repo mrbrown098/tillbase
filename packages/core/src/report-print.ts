@@ -247,7 +247,7 @@ export function buildReportHtml(input: ReportDocInput, opts: { forPdf?: boolean 
       const r = need();
       range = `${day(r.from)} to ${day(r.to)}`;
       body =
-        section("Sales by person", r.staff.length === 0 ? empty("No sales in this period.") : table([{ t: "Name" }, { t: "Sales", num: true }, { t: "Total", num: true }, { t: "Average", num: true }, { t: "Voided", num: true }], r.staff.map((s) => [esc(s.name), String(s.salesCount), esc(money(s.salesMinor)), esc(money(s.averageSaleMinor)), String(s.voidCount)]))) +
+        section("Sales by person", r.staff.length === 0 ? empty("No sales in this period.") : table([{ t: "Name" }, { t: "Sales", num: true }, { t: "Total before tax", num: true }, { t: "Average before tax", num: true }, { t: "Voided", num: true }], r.staff.map((s) => [esc(s.name), String(s.salesCount), esc(money(s.salesMinor)), esc(money(s.averageSaleMinor)), String(s.voidCount)]))) +
         section("Shifts", shiftTable(r));
       break;
     }

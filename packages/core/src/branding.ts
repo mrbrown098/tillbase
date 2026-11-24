@@ -7,6 +7,6 @@ export const TILLBASE_FOOTER = "Powered by Tillbase";
 
 /** Make sure plain text ends with the credit exactly once. Used for text that does not come from a formatter. */
 export function withTillbaseFooter(text: string): string {
-  const body = text.replace(/\s+$/, "");
+  const body = text.trimEnd();
   return body.endsWith(TILLBASE_FOOTER) ? body : `${body}\n${TILLBASE_FOOTER}`;
 }
