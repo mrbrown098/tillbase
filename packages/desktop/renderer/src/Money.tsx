@@ -260,14 +260,14 @@ export function Money() {
               <section className="panel">
                 <h2>Sales by person</h2>
                 {data.staff.length === 0 ? <p className="empty">No sales in this period.</p> : (
-                  <table className="table"><thead><tr><th>Name</th><th className="num">Sales</th><th className="num">Total</th><th className="num">Average</th><th className="num">Voided</th></tr></thead>
+                  <table className="table"><thead><tr><th>Name</th><th className="num">Sales</th><th className="num">Total before tax</th><th className="num">Average before tax</th><th className="num">Voided</th></tr></thead>
                     <tbody>{data.staff.map((s) => <tr key={s.userId}><td>{s.name}</td><td className="num">{s.salesCount}</td><td className="num">{money(s.salesMinor)}</td><td className="num">{money(s.averageSaleMinor)}</td><td className="num">{s.voidCount}</td></tr>)}</tbody></table>
                 )}
               </section>
               <section className="panel">
                 <h2>Shifts</h2>
                 {data.shifts.length === 0 ? <p className="empty">No shifts in this period.</p> : (
-                  <table className="table"><thead><tr><th>Cashier</th><th>Opened</th><th>Closed</th><th className="num">Sales</th><th className="num">Total</th><th className="num">Cash difference</th></tr></thead>
+                  <table className="table"><thead><tr><th>Cashier</th><th>Opened</th><th>Closed</th><th className="num">Sales</th><th className="num">Total before tax</th><th className="num">Cash difference</th></tr></thead>
                     <tbody>{data.shifts.map((s) => (
                       <tr key={s.shiftId}><td>{s.cashier}</td><td>{formatDateTime(s.openedAt)}</td><td>{s.closedAt ? formatDateTime(s.closedAt) : "Still open"}</td><td className="num">{s.salesCount}</td><td className="num">{money(s.salesMinor)}</td><td className={`num ${(s.varianceMinor ?? 0) < 0 ? "bad-text" : ""}`}>{s.varianceMinor === null ? "—" : money(s.varianceMinor)}</td></tr>
                     ))}</tbody></table>
