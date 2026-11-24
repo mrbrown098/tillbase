@@ -6,6 +6,10 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Started by the "Create release tag" workflow, which has just made the tag. The built-in token cannot
+  # start this workflow with a tag push, so it dispatches it on the tag instead. Run on a tag, never on a branch:
+  # the version check below fails if the ref is not a tag that equals the package versions.
+  workflow_dispatch:
 
 permissions:
   contents: read
