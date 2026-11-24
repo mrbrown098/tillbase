@@ -15,6 +15,8 @@ be chosen and configured when they exist, so the screens, settings and warnings 
 
 There is no Tillbase-hosted cloud in any mode: no Tillbase account, no subscription, nothing sent to us.
 
+Modes 1 to 4 here are modes A to D in [ARCHITECTURE.md](ARCHITECTURE.md), which sets out the server's security boundaries and the phases. This document covers the screens and warnings. The "tills" below are Tillbase apps; staff using a phone or tablet browser are covered under "Browser clients and certificates".
+
 ## How it fits the current architecture
 
 - The data rules already live in `@tillbase/core` and every call goes through `createHandlers` in
@@ -86,7 +88,7 @@ and a conflict review list.
 | HTTPS transport for `TillbaseApi`, same permission checks | yes | yes | yes |
 | Device pairing (one-time code, per-till secret, revoke) | yes | yes | yes |
 | Per-till terminal id for tokens and receipts | yes | yes | yes |
-| Self-signed certificate created on first use, pinned by clients | yes | no (customer's certificate) | depends |
+| Self-signed certificate created on first use, pinned by the Tillbase app (desktop tills only; a browser cannot pin, see below) | yes | no (customer's certificate) | depends |
 | Offline behaviour of a client till when the server is unreachable | "cannot sell" message | same | works offline by design |
 | Server backups with the existing `backup.ts` | yes | yes | yes |
 | Schema version check between client and server | yes | yes | yes |
@@ -123,6 +125,11 @@ Each of these must be true of the shipped code, not aspirational. Show them next
 - **Encryption.** "Tills talk to the server over an encrypted connection." True only with TLS on (required, not
   optional). For the self-signed certificate: the first pairing pins its fingerprint; a changed certificate stops
   the connection with a warning rather than continuing.
+- **Browser clients and certificates.** A phone or tablet browser cannot pin a certificate. It either trusts the certificate or shows a full-page warning, and a page on a plain `http://` address or a bare LAN address such as `https://192.168.x.x` with an untrusted certificate is not a "secure context", so browsers switch off camera access (barcode scanning with the phone camera) and installing the page as an app. Three ways to give browsers a trusted connection are open for decision, and none is built:
+  1. A certificate from a public authority for a name the shop owns that points to the server's private address (needs a domain name and a DNS-based certificate request).
+  2. A certificate authority made for the shop and installed on each device. It works, but the steps differ on every phone and the owner must protect the authority's key.
+  3. No encryption on the shop network. Basic screens work, but camera scanning and app installation do not, and anyone on the Wi-Fi could read the traffic.
+  Until one is chosen, browser access must not be described as secure in the app or the documentation.
 - **PINs.** PINs identify staff at the till; they are not a defence against someone with access to the server
   computer or its disk. The server stores PIN hashes only, never the PINs, and limits wrong attempts per till.
 - **Own server.** "You are responsible for this server: updates, backups, firewall and who can log in to the
