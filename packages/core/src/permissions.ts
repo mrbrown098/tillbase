@@ -4,6 +4,7 @@ export type Permission =
   | "sell"
   | "discount"
   | "void"
+  | "refund"
   | "cash.movement"
   | "products.manage"
   | "stock.adjust"
@@ -29,6 +30,7 @@ const manager: Permission[] = [
   ...cashier,
   "discount",
   "void",
+  "refund",
   "cash.movement",
   "products.manage",
   "stock.adjust",

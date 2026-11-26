@@ -19,6 +19,7 @@ import {
   ReportService,
   SaleService,
   SettingsService,
+  RefundService,
   ShiftService,
   UserService,
   can,
@@ -108,6 +109,7 @@ export function createHandlers(
   const orders = new OrderService(db, receiptPrefix);
   const productCsv = new ProductCsvService(db);
   const customers = new CustomerService(db);
+  const refunds = new RefundService(db);
   const printerConfig = new PrinterConfigService(db);
   const business = new BusinessProfileService(db);
 
@@ -317,7 +319,7 @@ export function createHandlers(
             sale.changeMinor;
           if (cash > 0) {
             try {
-              shifts.addCashMovement(shift.id, user.id, -cash, `Refund for voided ${sale.receiptNo}`);
+              shifts.addCashMovement(shift.id, user.id, -cash, `Refund for voided ${sale.receiptNo}`, { type: "void", id: sale.id });
             } catch {
               throw new Error("There is not enough cash in the drawer to refund this sale");
             }
@@ -325,6 +327,20 @@ export function createHandlers(
         }
         return sales.voidSale(saleId, reason);
       })();
+    },
+
+    async refundSale(input) {
+      const user = authorize("refund");
+      const shift = openShiftOrThrow();
+      return refunds.refund(input, { userId: user.id, userName: user.name, shiftId: shift.id });
+    },
+    async refundableSale(saleId) {
+      authorize("refund");
+      return refunds.refundable(saleId);
+    },
+    async recentRefunds(limit = 50) {
+      authorize("refund");
+      return refunds.recent(limit);
     },
 
     // ---- Shifts and cash ----------------------------------------------

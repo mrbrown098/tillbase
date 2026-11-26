@@ -36,6 +36,8 @@ export type { User } from "./users.js";
 export { can, permissionsOf, roles } from "./permissions.js";
 export type { Permission, Role } from "./permissions.js";
 export { ShiftService } from "./shifts.js";
+export { RefundService } from "./refunds.js";
+export type { Refund, RefundInput, RefundLine, RefundLineInput, RefundMethod, RefundableLine, RefundableSale, RefundContext } from "./refunds.js";
 export type { Shift, ShiftSummary } from "./shifts.js";
 export { SettingsService, defaultSettings, footerWithCredit, MAX_LOGO_BYTES } from "./settings.js";
 export type { ShopSettings } from "./settings.js";

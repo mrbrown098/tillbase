@@ -3,6 +3,9 @@ import type { Db } from "./db.js";
 export interface SalesSummary {
   salesCount: number;
   voidCount: number;
+  /** Refunds made in this period (by the date of the refund) and what they handed back, tax included. `totalMinor` is not reduced. */
+  refundCount: number;
+  refundedMinor: number;
   subtotalMinor: number;
   discountMinor: number;
   taxMinor: number;
@@ -45,6 +48,10 @@ export class ReportService {
         .get(from, to) as { n: number }
     ).n;
 
+    const refunds = this.db
+      .prepare("SELECT COUNT(*) AS n, COALESCE(SUM(amount_minor), 0) AS total FROM refunds WHERE created_at >= ? AND created_at < ?")
+      .get(from, to) as { n: number; total: number };
+
     // Payments include cash handed over; subtract change from cash so each
     // method reflects money actually kept.
     const methodRows = this.db
@@ -81,6 +88,8 @@ export class ReportService {
     return {
       salesCount: totals.n,
       voidCount,
+      refundCount: refunds.n,
+      refundedMinor: refunds.total,
       subtotalMinor: totals.subtotal,
       discountMinor: totals.discount,
       taxMinor: totals.tax,
