@@ -6,6 +6,11 @@ import { assertWithinCreditLimit, customerSummary, loyaltyConfig, plainAmount, p
 import { taxFor } from "./money.js";
 
 export type PaymentMethod = "cash" | "card" | "other";
+/**
+ * Every way a sale can be paid. `PaymentMethod` is kept as it was so screens that list the three older
+ * methods still compile; the pay screen adopts `bank_transfer` when it is ready to offer it.
+ */
+export type SalePaymentMethod = PaymentMethod | "bank_transfer";
 
 export interface CartLine {
   productId: string;
@@ -17,8 +22,10 @@ export interface CartLine {
 }
 
 export interface PaymentInput {
-  method: PaymentMethod;
+  method: SalePaymentMethod;
   amountMinor: number;
+  /** A transaction number or note, e.g. for a bank transfer. Optional, at most 80 characters. */
+  reference?: string | null;
 }
 
 export interface CheckoutInput {
@@ -41,6 +48,11 @@ export interface CheckoutInput {
    * it is not a payment and never reaches the drawer. Needs a customer, and respects their credit limit.
    */
   onAccountMinor?: number;
+  /**
+   * Made once per attempt by the screen (a UUID). If a sale with this id is already saved, `checkout` returns
+   * that sale and saves nothing, so a double click or a repeated request cannot sell twice.
+   */
+  requestId?: string;
 }
 
 export interface SaleItem {
@@ -59,10 +71,12 @@ export interface SaleItem {
 
 export interface Payment {
   id: string;
-  method: PaymentMethod;
+  method: SalePaymentMethod;
   amountMinor: number;
-  /** Names an "other" payment, e.g. "wallet". */
+  /** Names an "other" payment, e.g. "wallet". Bank transfers are named "Bank transfer". */
   label: string | null;
+  /** Transaction number or note the cashier typed, if any. */
+  reference: string | null;
 }
 
 export interface Sale {
@@ -134,8 +148,17 @@ export class SaleService {
    */
   checkout(input: CheckoutInput): Sale {
     if (input.lines.length === 0) throw new Error("The cart is empty");
+    const requestId = input.requestId === undefined ? null : input.requestId.trim();
+    if (requestId !== null && (requestId.length < 8 || requestId.length > 100)) {
+      throw new Error("The request id must be 8 to 100 characters");
+    }
 
     const run = this.db.transaction((): string => {
+      // The same request again (a double click): give back the sale already saved and change nothing.
+      if (requestId !== null) {
+        const done = this.db.prepare("SELECT id FROM sales WHERE request_id = ?").get(requestId) as { id: string } | undefined;
+        if (done) return done.id;
+      }
       const now = new Date().toISOString();
       const saleId = randomUUID();
 
@@ -288,9 +311,18 @@ export class SaleService {
         if (walletWanted + onAccount > total) throw new Error("The wallet and the amount on account are more than the bill");
         assertWithinCreditLimit(this.db, cust!.id, onAccount);
       }
-      const allPayments: { method: PaymentMethod; amountMinor: number; label: string | null }[] = [
-        ...input.payments.map((x) => ({ ...x, label: null })),
-        ...(walletWanted > 0 ? [{ method: "other" as const, amountMinor: walletWanted, label: "wallet" }] : []),
+      const allPayments: { method: SalePaymentMethod; amountMinor: number; label: string | null; reference: string | null }[] = [
+        ...input.payments.map((x) => {
+          const reference = x.reference?.trim() || null;
+          if (reference !== null && reference.length > 80) throw new Error("A payment reference can be at most 80 characters");
+          return {
+            method: x.method,
+            amountMinor: x.amountMinor,
+            label: x.method === "bank_transfer" ? "Bank transfer" : null,
+            reference,
+          };
+        }),
+        ...(walletWanted > 0 ? [{ method: "other" as const, amountMinor: walletWanted, label: "wallet", reference: null }] : []),
       ];
       if (allPayments.length === 0 && total - onAccount > 0) throw new Error("A payment is required");
       const earned = cust ? pointsFor(eligibleNetAfter, cfg) : 0;
@@ -319,8 +351,8 @@ export class SaleService {
         .prepare(
           `INSERT INTO sales (id, receipt_no, status, subtotal_minor, discount_minor,
              tax_minor, total_minor, paid_minor, change_minor, cashier, created_at,
-             shift_id, user_id, customer_id, points_earned, points_redeemed, on_account_minor)
-           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             shift_id, user_id, customer_id, points_earned, points_redeemed, on_account_minor, request_id)
+           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           saleId,
@@ -339,6 +371,7 @@ export class SaleService {
           earned,
           redeem,
           onAccount,
+          requestId,
         );
 
       const insItem = this.db.prepare(
@@ -373,10 +406,10 @@ export class SaleService {
       }
 
       const insPay = this.db.prepare(
-        "INSERT INTO payments (id, sale_id, method, amount_minor, label) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO payments (id, sale_id, method, amount_minor, label, reference) VALUES (?, ?, ?, ?, ?, ?)",
       );
       for (const pay of allPayments) {
-        insPay.run(randomUUID(), saleId, pay.method, pay.amountMinor, pay.label);
+        insPay.run(randomUUID(), saleId, pay.method, pay.amountMinor, pay.label, pay.reference);
       }
 
       // The customer's ledger: points used, wallet spent, points earned.
@@ -467,9 +500,10 @@ export class SaleService {
     ).map(
       (r): Payment => ({
         id: r.id as string,
-        method: r.method as PaymentMethod,
+        method: r.method as SalePaymentMethod,
         amountMinor: r.amount_minor as number,
         label: (r.label as string | null) ?? null,
+        reference: (r.reference as string | null) ?? null,
       }),
     );
 
