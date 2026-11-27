@@ -87,6 +87,12 @@ describe("refund amounts", () => {
     expect(() => db.prepare("DELETE FROM refunds").run()).toThrow(/cannot be removed/);
     expect(() => db.prepare("UPDATE refund_items SET qty = 1").run()).toThrow(/cannot be changed/);
     expect(() => db.prepare("DELETE FROM refund_items").run()).toThrow(/cannot be removed/);
+    // overwriting through INSERT OR REPLACE does not fire a delete trigger, so it is refused on its own
+    const row = db.prepare("SELECT * FROM refunds").get() as Record<string, unknown>;
+    expect(() => db.prepare("INSERT OR REPLACE INTO refunds (id, sale_id, user_id, user_name, reason, method, restock, amount_minor, tax_minor, cogs_minor, created_at) VALUES (?, ?, 'u', 'u', 'changed', 'cash', 0, 1, 0, 0, 't')").run(row.id, row.sale_id)).toThrow(/cannot be changed/);
+    const item = db.prepare("SELECT * FROM refund_items").get() as Record<string, unknown>;
+    expect(() => db.prepare("INSERT OR REPLACE INTO refund_items (id, refund_id, sale_item_id, qty, amount_minor, tax_minor, cogs_minor, restocked) VALUES (?, ?, ?, 1, 1, 0, 0, 0)").run(item.id, item.refund_id, item.sale_item_id)).toThrow(/cannot be changed/);
+    expect(db.prepare("SELECT reason FROM refunds").get()).toEqual({ reason: "r" });
   });
 });
 

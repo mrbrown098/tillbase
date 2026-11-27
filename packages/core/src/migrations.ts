@@ -591,6 +591,13 @@ export const migrations: Migration[] = [
       BEGIN SELECT RAISE(ABORT, 'A refund cannot be changed.'); END;
       CREATE TRIGGER refund_items_no_delete BEFORE DELETE ON refund_items
       BEGIN SELECT RAISE(ABORT, 'A refund cannot be removed.'); END;
+      -- INSERT OR REPLACE would overwrite a refund without firing the delete trigger.
+      CREATE TRIGGER refunds_no_replace BEFORE INSERT ON refunds
+      WHEN EXISTS (SELECT 1 FROM refunds WHERE id = NEW.id)
+      BEGIN SELECT RAISE(ABORT, 'A refund cannot be changed.'); END;
+      CREATE TRIGGER refund_items_no_replace BEFORE INSERT ON refund_items
+      WHEN EXISTS (SELECT 1 FROM refund_items WHERE id = NEW.id)
+      BEGIN SELECT RAISE(ABORT, 'A refund cannot be changed.'); END;
 
       -- Which sale line a stock movement belongs to, so a refund can put back exactly what that line used.
       -- Sales made before this version have no link; they can still be refunded without restocking.
@@ -603,6 +610,40 @@ export const migrations: Migration[] = [
 
       ALTER TABLE cash_movements ADD COLUMN ref_type TEXT;
       ALTER TABLE cash_movements ADD COLUMN ref_id TEXT;
+    `,
+  },
+  {
+    version: 12,
+    sql: `
+      -- The audit trail: who did what and when. Entries are only ever added. The triggers refuse any change or
+      -- removal, and AUTOINCREMENT means a sequence number is never used twice.
+      CREATE TABLE audit_log (
+        seq       INTEGER PRIMARY KEY AUTOINCREMENT,
+        at        TEXT NOT NULL,
+        user_id   TEXT,
+        user_name TEXT,
+        action    TEXT NOT NULL,
+        entity    TEXT NOT NULL,
+        entity_id TEXT,
+        summary   TEXT NOT NULL,
+        detail    TEXT
+      );
+      CREATE INDEX idx_audit_at ON audit_log(at);
+      CREATE INDEX idx_audit_action ON audit_log(action, at);
+      CREATE INDEX idx_audit_user ON audit_log(user_id, at);
+      CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log
+      BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be changed.'); END;
+      CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log
+      BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be changed.'); END;
+      -- INSERT OR REPLACE would overwrite an entry without firing the delete trigger, so a second row with a
+      -- number that is already used is refused outright.
+      -- The customer ledger (version 9) has the same gap: INSERT OR REPLACE could overwrite a row silently.
+      CREATE TRIGGER customer_ledger_no_replace BEFORE INSERT ON customer_ledger
+      WHEN EXISTS (SELECT 1 FROM customer_ledger WHERE id = NEW.id)
+      BEGIN SELECT RAISE(ABORT, 'The customer ledger cannot be changed.'); END;
+      CREATE TRIGGER audit_log_no_replace BEFORE INSERT ON audit_log
+      WHEN NEW.seq IS NOT NULL AND EXISTS (SELECT 1 FROM audit_log WHERE seq = NEW.seq)
+      BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be changed.'); END;
     `,
   },
 ];
