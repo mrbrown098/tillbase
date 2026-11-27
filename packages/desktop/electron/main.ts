@@ -92,8 +92,14 @@ void app.whenReady().then(() => {
   const settingsReader = new SettingsService(db);
   const ads = createAdService({ openExternal, enabled: () => settingsReader.get().showSponsors });
   const updates = createUpdateChecker({ currentVersion: app.getVersion(), openExternal });
+  // The printers this computer has, as Electron sees them. Used by the printer settings to pick a USB or installed printer.
+  const listSystem = async () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) return [];
+    return (await win.webContents.getPrintersAsync()).map((p) => ({ name: p.name, isDefault: !!p.isDefault }));
+  };
   registerIpc(
-    createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, dbPath: path, afterShiftClose: quietBackup, files, ads, updates, appVersion: app.getVersion() }),
+    createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, dbPath: path, afterShiftClose: quietBackup, files, ads, updates, appVersion: app.getVersion(), printing: { listSystem } }),
   );
   createWindow();
 

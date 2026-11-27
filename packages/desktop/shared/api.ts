@@ -506,6 +506,8 @@ export interface TillbaseApi {
   /** Where receipts go (any signed-in user can read it, so screens know whether to print by themselves). */
   getPrinter(): Promise<PrinterConfig>;
   setPrinter(config: Partial<PrinterConfig>): Promise<PrinterConfig>;
+  /** Printers installed on this computer (needs `settings.manage`). Empty when the list cannot be read. */
+  listSystemPrinters(): Promise<{ name: string; isDefault: boolean }[]>;
   /** Print a sale's receipt (with the shop logo). Opens the cash drawer when the printer is set to and the sale took cash. */
   printReceipt(saleId: string): Promise<PrintResult>;
   printKitchenTicket(ticket: KitchenTicket): Promise<PrintResult>;
@@ -585,6 +587,6 @@ export const channels: (keyof TillbaseApi)[] = [
   "resetPin",
   "changeOwnPin",
   "chooseProductCsv","productCsvTemplate","exportProductCsv","saveCsvFile","previewProductCsv","importProductCsv",
-  "getPrinter","setPrinter","printReceipt","printKitchenTicket","printStatement","printTestPage","openCashDrawer",
+  "getPrinter","setPrinter","listSystemPrinters","printReceipt","printKitchenTicket","printStatement","printTestPage","openCashDrawer",
   "getBusinessProfile","saveBusinessProfile","beginOnboarding","finishOnboarding","restartOnboarding",
 ];
