@@ -1,4 +1,7 @@
 import Database from "better-sqlite3";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   InventoryService, ProductService, SaleService, ShiftService, UserService, migrate, migrations, openDatabase, type Db,
@@ -172,7 +175,8 @@ describe("duplicate-posting guard", () => {
 
   it("two connections to the same file cannot both post the same request", () => {
     // Two app windows or processes share the file; SQLite lets one writer in at a time and the unique index decides.
-    const path = `${process.env.TMPDIR ?? "/tmp"}/tillbase-dup-${process.pid}-${Date.now()}.sqlite`;
+    const dir = mkdtempSync(join(tmpdir(), "tillbase-dup-"));
+    const path = join(dir, "dup.sqlite");
     const a = openDatabase(path);
     const b = openDatabase(path);
     const pid = new ProductService(a).create({ name: "Rice", priceMinor: 100 }).id;
@@ -184,6 +188,7 @@ describe("duplicate-posting guard", () => {
     expect(a.prepare("SELECT COUNT(*) AS n FROM sales").get()).toEqual({ n: 1 });
     a.close();
     b.close();
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 
