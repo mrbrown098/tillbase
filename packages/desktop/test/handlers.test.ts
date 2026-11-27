@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { openDatabase } from "@tillbase/core";
+import { dates, openDatabase } from "@tillbase/core";
 import { createHandlers } from "../electron/handlers";
 import type { TillbaseApi } from "../shared/api";
 
@@ -443,5 +443,32 @@ describe("audit trail", () => {
     const log = await api.listAudit({ limit: 500 });
     expect(log.filter((e) => e.action === "sale.void" || e.action === "sale.refund")).toHaveLength(0);
     expect(log.filter((e) => e.action === "sale.discount")).toHaveLength(1);
+  });
+});
+
+describe("day-close report", () => {
+  it("is computed by the core, hides profit from managers, and is closed to cashiers", async () => {
+    await ready();
+    const p = await api.createProduct({ name: "Tea", priceMinor: 10_000, taxRateBp: 0, trackStock: false });
+    await api.checkout({ lines: [{ productId: p.id, qty: 2 }], payments: [{ method: "bank_transfer", amountMinor: 20_000, reference: "TX-1" }] });
+    const today = dates.localDate();
+    const owner = await api.dayCloseReport(today);
+    expect(owner).toMatchObject({ salesCount: 1, billedMinor: 20_000, netTakingsMinor: 20_000, receivedByMethod: { bank_transfer: 20_000, cash: 0 } });
+    expect(owner.profit).not.toBeNull();
+    expect(owner.shifts[0]).toMatchObject({ status: "open", openingCashMinor: 10_000 });
+    expect(owner.warnings.join(" ")).toMatch(/still open/);
+
+    const mgr = await makeStaff("Mo", "manager");
+    const cashier = await makeStaff("Cy", "cashier");
+    await api.logout();
+    await api.login(mgr.id, mgr.pin);
+    const asManager = await api.dayCloseReport(today);
+    expect(asManager.profit).toBeNull();
+    expect(asManager.billedMinor).toBe(20_000);
+    await api.logout();
+    await api.login(cashier.id, cashier.pin);
+    await expect(api.dayCloseReport(today)).rejects.toThrow(/permission/);
+    await api.logout();
+    await expect(api.dayCloseReport(today)).rejects.toThrow(/sign in/);
   });
 });

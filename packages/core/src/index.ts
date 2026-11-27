@@ -59,6 +59,8 @@ export type {
   PayslipLineInput, PayrollPreviewLine,
 } from "./labour.js";
 export * as dates from "./dates.js";
+export { DayCloseService } from "./day-close.js";
+export type { DayCloseReport as CoreDayCloseReport, DayCloseShift as CoreDayCloseShift } from "./day-close.js";
 export { FinanceService } from "./finance.js";
 export type { BreakdownLine, DailyPoint, ItemProfit, ProfitAndLoss } from "./finance.js";
 export { backupDatabase } from "./backup.js";
