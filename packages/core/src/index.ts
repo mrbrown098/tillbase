@@ -24,6 +24,7 @@ export type {
   CheckoutInput,
   PaymentInput,
   PaymentMethod,
+  SalePaymentMethod,
   Payment,
   Sale,
   SaleItem,

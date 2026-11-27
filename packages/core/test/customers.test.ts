@@ -390,7 +390,7 @@ describe("upgrading to v6", () => {
     expect(old.pragma("user_version", { simple: true })).toBe(migrations.length);
     const sale = new SaleService(old).get("s1")!;
     expect(sale).toMatchObject({ totalMinor: 5_000, customerId: null, customer: null, pointsEarned: 0, pointsRedeemed: 0 });
-    expect(sale.payments).toEqual([{ id: "pay1", method: "cash", amountMinor: 5_000, label: null }]);
+    expect(sale.payments).toEqual([{ id: "pay1", method: "cash", amountMinor: 5_000, label: null, reference: null }]);
     expect(new OrderService(old).get("o1")).toMatchObject({ status: "open", customerId: null, customer: null });
     // The new features work on the upgraded database, and running the upgrade again is harmless.
     const cs = new CustomerService(old);
