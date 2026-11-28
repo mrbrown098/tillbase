@@ -11,7 +11,6 @@ export function Settings() {
   const [footer, setFooter] = useState(settings.receiptFooter);
   const [width, setWidth] = useState(String(settings.receiptWidth));
   const [error, setError] = useState("");
-  const [credit, setCredit] = useState(settings.showCredit);
   const [sponsors, setSponsors] = useState(settings.showSponsors);
   const [version, setVersion] = useState("");
   const [checkMsg, setCheckMsg] = useState("");
@@ -34,7 +33,6 @@ export function Settings() {
         locale,
         receiptFooter: footer,
         receiptWidth: Number(width),
-        showCredit: credit,
         showSponsors: sponsors,
       });
       setSettings(next);
@@ -126,10 +124,6 @@ export function Settings() {
             <span className="muted small">{checkMsg}</span>
           </div>
         </div>
-        <label className="check span2">
-          <input type="checkbox" checked={credit} onChange={(e) => setCredit(e.target.checked)} />
-          Print "Powered by Tillbase" and the copyright line under the footer
-        </label>
       </div>
       {error && (
         <p className="form-error" role="alert">

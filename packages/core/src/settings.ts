@@ -8,8 +8,6 @@ export interface ShopSettings {
   receiptWidth: number;
   /** The shop's own logo as a small data: URL (PNG, JPEG or WebP), or "" for none. */
   businessLogo: string;
-  /** Print a small "Tillbase" credit and copyright line under the receipt footer. */
-  showCredit: boolean;
   /** Show the small, clearly labelled sponsor line on the Home screen. The owner can switch it off. */
   showSponsors: boolean;
 }
@@ -21,18 +19,11 @@ export const defaultSettings: ShopSettings = {
   receiptFooter: "Thank you!",
   receiptWidth: 32,
   businessLogo: "",
-  showCredit: true,
   showSponsors: true,
 };
 
 /** Largest logo we keep: it is stored in the database and shown on every screen. */
 export const MAX_LOGO_BYTES = 300_000;
-
-/** The footer for printed receipts and statements: the shop's own words, then the optional Tillbase credit. */
-export function footerWithCredit(s: Pick<ShopSettings, "receiptFooter" | "showCredit">, year = new Date().getFullYear()): string {
-  if (!s.showCredit) return s.receiptFooter;
-  return `${s.receiptFooter}\nPowered by Tillbase (free POS)\n(c) ${year} Tillbase contributors`;
-}
 
 /** Key/value shop settings stored in the local database. */
 export class SettingsService {
@@ -53,7 +44,6 @@ export class SettingsService {
         ? Number(stored.receiptWidth)
         : defaultSettings.receiptWidth,
       businessLogo: stored.businessLogo ?? defaultSettings.businessLogo,
-      showCredit: stored.showCredit === undefined ? defaultSettings.showCredit : stored.showCredit === "true",
       showSponsors: stored.showSponsors === undefined ? defaultSettings.showSponsors : stored.showSponsors === "true",
     };
   }
@@ -87,6 +77,8 @@ export class SettingsService {
     this.db.transaction(() => {
       for (const [k, v] of Object.entries(patch)) {
         if (v === undefined) continue;
+        // The "Powered by Tillbase" credit is permanent. An old "showCredit" value from an earlier version is ignored.
+        if (k === "showCredit") continue;
         const value = k === "currency" ? String(v).toUpperCase() : String(v);
         put.run(k, k === "storeName" ? value.trim() : value);
       }

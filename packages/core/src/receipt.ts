@@ -1,4 +1,5 @@
 import { formatMoney } from "./money.js";
+import { TILLBASE_FOOTER } from "./branding.js";
 import type { Statement } from "./customers.js";
 import type { Sale } from "./sales.js";
 import type { KitchenTicket } from "./orders.js";
@@ -75,7 +76,8 @@ export function formatReceipt(sale: Sale, opts: ReceiptOptions): string {
     }
   }
   out.push(line);
-  out.push(opts.footer ?? "Thank you!");
+  out.push(opts.footer ?? "Thank you!"); // the shop's own message
+  out.push(TILLBASE_FOOTER); // permanent, added here so no caller can leave it out
   return out.join("\n");
 }
 
@@ -114,7 +116,8 @@ export function formatStatement(st: Statement, opts: ReceiptOptions & { printedA
   out.push(row("OWES NOW", money(st.owedMinor), width));
   if (st.customer.creditLimitMinor !== null) out.push(row("Credit limit", money(st.customer.creditLimitMinor), width));
   out.push(line);
-  out.push(opts.footer ?? "Thank you!");
+  out.push(opts.footer ?? "Thank you!"); // the shop's own message
+  out.push(TILLBASE_FOOTER); // permanent, added here so no caller can leave it out
   return out.join("\n");
 }
 
@@ -133,5 +136,7 @@ export function formatKitchenTicket(t: KitchenTicket, opts: { width?: number } =
     rule,
     ...lines,
     ...(t.note ? [rule, `ORDER NOTE: ${t.note}`] : []),
+    rule,
+    TILLBASE_FOOTER,
   ].join("\n");
 }

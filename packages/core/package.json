@@ -26,6 +26,14 @@
     "./discount": {
       "types": "./dist/discount.d.ts",
       "default": "./dist/discount.js"
+    },
+    "./charts": {
+      "types": "./dist/charts.d.ts",
+      "default": "./dist/charts.js"
+    },
+    "./report-range": {
+      "types": "./dist/report-range.d.ts",
+      "default": "./dist/report-range.js"
     }
   },
   "scripts": {

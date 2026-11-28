@@ -1,0 +1,12 @@
+.report-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+.report-tabs .btn.on { background: #1d4ed8; color: #fff; }
+.chart-card svg { width: 100%; height: auto; display: block; }
+.chart-card .cap { color: #6b7280; font-size: 0.85rem; margin: 0 0 4px; }
+.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; margin: 12px 0; }
+.print-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 4px; }
+.print-bar select { width: auto; max-width: 260px; }
+.preview-frame { width: 100%; height: 70vh; border: 1px solid #d1d5db; background: #fff; }
+.calc-table td.num, .calc-table th.num { text-align: right; white-space: nowrap; }
+.calc-table tr.total td { font-weight: 700; border-top: 2px solid currentColor; }
+.calc-table tr.sub td { color: #6b7280; padding-left: 24px; }
+.est { color: #b45309; font-weight: 600; }

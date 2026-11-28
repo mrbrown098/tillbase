@@ -4,6 +4,14 @@ All notable changes to Tillbase are listed here, newest first. The format follow
 
 ## [Unreleased]
 
+### Added
+- **Reports** (the Money tab, owners only): Today, Yesterday, This week (Monday to today), This month or any dates. Sales, cost of goods, gross and net profit with every step of the calculation shown, payment methods, best sellers and slow movers, stock value and low stock, expenses by category, supplier and customer balances, and staff and shift performance. Charts for sales and gross profit over time, busy hours, payment methods, expenses, best sellers and stock. Everything comes from your own records; where a cost is missing or wages are estimated, the screen and the printout say so.
+- **A4 reports**: Daily and monthly sales, profit and loss, expenses, stock, product performance, staff and shifts, and customer and supplier statements. Preview them, **Print** (opens the A4 PDF in your PDF viewer) or **Save as PDF**. Each has the shop name and logo, the dates, when it was made, and "Powered by Tillbase" with the page number on every page.
+- Real-app check `scripts/e2e-reports.mjs` (also in CI): compares the sales figure on screen with the database, makes every report as a PDF and checks A4 size and the footer on each page.
+
+### Changed
+- "Powered by Tillbase" is now permanent on everything Tillbase prints (58 mm and 80 mm receipts, kitchen tickets, statements, A4 reports). The Settings switch for it is gone, and an old saved value is ignored. The shop's own receipt message is separate and unchanged.
+
 ## [0.6.0] - 2026-11-22
 
 A big usability release: a guided first-run setup with business profiles, a new Home screen and menu, shop logos, customer credit (khata), supplier orders, direct receipt printing, and an optional sponsor line and update notice. Existing shop data is upgraded automatically (database migrations 7 to 9); a backup is taken at start-up, as always.

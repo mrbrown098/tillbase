@@ -5,6 +5,7 @@ import { BackupManager, flushPendingAudit, openDatabase, SettingsService } from 
 import { channels, type IpcResult, type TillbaseApi } from "../shared/api.js";
 import { createAdService } from "./ads.js";
 import { createFileDialogs } from "./files.js";
+import { createReportOutput } from "./report-output.js";
 import { createUpdateChecker } from "./updates.js";
 import { createHandlers } from "./handlers.js";
 
@@ -82,6 +83,7 @@ void app.whenReady().then(() => {
   };
   quietBackup();
   const files = createFileDialogs(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
+  const reportOutput = createReportOutput(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
   const afterRestore = () => {
     // The old connection is closed and the files are swapped: start again on the restored data.
     app.relaunch();
@@ -99,7 +101,7 @@ void app.whenReady().then(() => {
     return (await win.webContents.getPrintersAsync()).map((p) => ({ name: p.name, isDefault: !!p.isDefault }));
   };
   registerIpc(
-    createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, dbPath: path, afterShiftClose: quietBackup, files, ads, updates, appVersion: app.getVersion(), printing: { listSystem } }),
+    createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, dbPath: path, afterShiftClose: quietBackup, files, reportOutput, ads, updates, appVersion: app.getVersion(), printing: { listSystem } }),
   );
   createWindow();
 

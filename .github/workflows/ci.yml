@@ -75,6 +75,8 @@ jobs:
       - name: App smoke test
         if: runner.os != 'Linux'
         run: node scripts/smoke.mjs --dev --shots smoke-output
+      - name: Reports and A4 PDFs end to end (real app, checks the numbers against the database)
+        run: node scripts/e2e-reports.mjs --shots smoke-output
       - name: Save screenshots
         if: always()
         uses: actions/upload-artifact@v7
