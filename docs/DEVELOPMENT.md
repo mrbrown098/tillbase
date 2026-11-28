@@ -82,6 +82,7 @@ npm run app                # prepare SQLite for Electron, build everything, open
 | Staff, shifts | `users.ts`, `shifts.ts`, `permissions.ts` | `Staff.tsx`, `Shift.tsx`, `Login.tsx` |
 | CSV | `csv.ts`, `product-csv.ts` | `ImportExport.tsx` (native dialogs in `electron/files.ts`) |
 | Backups | `backup.ts` | `main.ts` |
+| Deployment modes (proposal, not built) | n/a | see `docs/DEPLOYMENT-MODES.md` |
 
 ## Test-only switches
 
