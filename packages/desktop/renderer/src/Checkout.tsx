@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { taxFor } from "@tillbase/core/money";
-import type { Customer, LoyaltyConfig, PaymentInput, PaymentMethod } from "@tillbase/core";
+import type { Customer, LoyaltyConfig, PaymentInput, SalePaymentMethod } from "@tillbase/core";
 import type { ProductWithStock } from "../../shared/api";
 import { api } from "./api";
 import { useApp } from "./context";
@@ -8,7 +8,7 @@ import { CustomerPicker } from "./CustomerPicker";
 import { maxPoints, planPayment, pointsEarned, type BillLine } from "./loyalty";
 import { minorToInput, parseMoney } from "./format";
 import { Modal, ReceiptView, PrintArea } from "./Modal";
-import { methodLabel, summarizePayments } from "./payments";
+import { MAX_REFERENCE, buildPayment, methodLabel, saleMethods, summarizePayments } from "./payments";
 import { PrintNotice, usePrinting } from "./printing";
 
 interface Line {
@@ -31,6 +31,9 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
   const [results, setResults] = useState<ProductWithStock[]>([]);
   const [cart, setCart] = useState<Line[]>([]);
   const [paying, setPaying] = useState(false);
+  // One id per payment attempt: if the same dialog is confirmed twice (a double tap, a retry after a
+  // dropped answer) the core returns the sale it already saved instead of selling again.
+  const attemptId = useRef<string | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [config, setConfig] = useState<LoyaltyConfig | null>(null);
@@ -162,8 +165,10 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
           discountMinor: l.discountMinor,
         })),
         payments,
+        ...(attemptId.current ? { requestId: attemptId.current } : {}),
         ...(customer ? { customerId: customer.id, redeemPoints: loyalty.redeemPoints, walletMinor: loyalty.walletMinor, onAccountMinor: loyalty.onAccountMinor } : {}),
       });
+      attemptId.current = null;
       setCart([]);
       setCustomer(null);
       setPaying(false);
@@ -325,7 +330,10 @@ export function Checkout({ onOpenShift }: { onOpenShift: () => void }) {
           <button
             className="btn btn-primary btn-lg"
             disabled={cart.length === 0 || !shiftOpen}
-            onClick={() => setPaying(true)}
+            onClick={() => {
+              attemptId.current = crypto.randomUUID();
+              setPaying(true);
+            }}
           >
             Pay {cart.length > 0 ? money(totals.total) : ""}
           </button>
@@ -418,7 +426,8 @@ function PayInner({
 }) {
   const { money } = useApp();
   const [split, setSplit] = useState(false);
-  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [method, setMethod] = useState<SalePaymentMethod>("cash");
+  const [reference, setReference] = useState("");
   const [text, setText] = useState(minorToInput(total));
   const [added, setAdded] = useState<PaymentInput[]>([]);
   const [busy, setBusy] = useState(false);
@@ -432,6 +441,7 @@ function PayInner({
     setAdded([]);
     setSplit(false);
     setMethod("cash");
+    setReference("");
   }, [total]);
 
   // ---- one payment ----
@@ -473,24 +483,27 @@ function PayInner({
       return;
     }
     if (!valid || tendered === null) return;
-    await send([{ method, amountMinor: tendered }]);
+    await send([buildPayment(method, tendered, reference)]);
   };
 
   const startSplit = () => {
     setSplit(true);
     setMethod("cash");
+    setReference("");
     setText(minorToInput(total));
   };
   const backToOne = () => {
     setSplit(false);
     setAdded([]);
     setMethod("cash");
+    setReference("");
     setText(minorToInput(total));
   };
   const addPayment = () => {
     if (!canAdd || amount === null) return;
-    const next = [...added, { method, amountMinor: amount }];
+    const next = [...added, buildPayment(method, amount, reference)];
     setAdded(next);
+    setReference("");
     const left = summarizePayments(total, next).remainingMinor;
     setText(left > 0 ? minorToInput(left) : "");
   };
@@ -501,15 +514,32 @@ function PayInner({
     setText(left > 0 ? minorToInput(left) : "");
   };
 
+  const referenceField = method === "bank_transfer" && (
+    <label className="field">
+      Reference (optional)
+      <input
+        value={reference}
+        maxLength={MAX_REFERENCE}
+        placeholder="Transaction number or note"
+        autoComplete="off"
+        onChange={(e) => setReference(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") split ? addPayment() : void submit();
+        }}
+      />
+    </label>
+  );
+
   const methodButtons = (
     <div className="methods" role="group" aria-label="Payment method">
-      {(["cash", "card", "other"] as const).map((m) => (
+      {saleMethods.map((m) => (
         <button
           key={m}
           className={`btn btn-lg${method === m ? " btn-primary" : ""}`}
           aria-pressed={method === m}
           onClick={() => {
             setMethod(m);
+            if (m !== "bank_transfer") setReference("");
             if (split && m !== method) setText(summary.remainingMinor > 0 ? minorToInput(summary.remainingMinor) : "");
           }}
         >
@@ -542,7 +572,10 @@ function PayInner({
           <ul className="split-list" aria-label="Payments added">
             {added.map((p, i) => (
               <li key={i}>
-                <span>{methodLabel[p.method]}</span>
+                <span>
+                  {methodLabel[p.method]}
+                  {p.reference ? <span className="muted small"> · ref {p.reference}</span> : null}
+                </span>
                 <strong>{money(p.amountMinor)}</strong>
                 <button className="btn btn-ghost" aria-label={`Remove ${methodLabel[p.method]} payment of ${money(p.amountMinor)}`} onClick={() => removePayment(i)}>
                   ✕
@@ -567,8 +600,9 @@ function PayInner({
                 }}
               />
             </label>
+            {referenceField}
             <div className="quick">
-              <button className="btn" disabled={!canAdd} onClick={addPayment}>
+              <button className="btn btn-lg" disabled={!canAdd} onClick={addPayment}>
                 Add {methodLabel[method].toLowerCase()} payment
               </button>
             </div>
@@ -640,11 +674,16 @@ function PayInner({
           </p>
         </>
       ) : (
-        <p className="muted">
-          {method === "card"
-            ? `Charge ${money(total)} on the card terminal, then confirm.`
-            : `Record ${money(total)} as paid by another method, then confirm.`}
-        </p>
+        <>
+          <p className="muted">
+            {method === "card"
+              ? `Charge ${money(total)} on the card terminal, then confirm.`
+              : method === "bank_transfer"
+                ? `Check that ${money(total)} has reached the shop's account, then confirm.`
+                : `Record ${money(total)} as paid by another method, then confirm.`}
+          </p>
+          {referenceField}
+        </>
       )}
 
       <div className="modal-actions">
@@ -657,7 +696,13 @@ function PayInner({
           </button>
         )}
         <button className="btn btn-primary btn-lg" disabled={(total > 0 && !valid) || busy || blocked} onClick={() => void submit()}>
-          {total === 0 || method === "cash" ? "Complete sale" : method === "card" ? "Card approved — complete sale" : "Complete sale"}
+          {total === 0 || method === "cash"
+            ? "Complete sale"
+            : method === "card"
+              ? "Card approved — complete sale"
+              : method === "bank_transfer"
+                ? "Transfer received — complete sale"
+                : "Complete sale"}
         </button>
       </div>
     </Modal>

@@ -840,8 +840,8 @@ tr.inactive td {
 .split-item-name { flex: 1; display: grid; }
 .split-two { grid-template-columns: repeat(2, 1fr); }
 .split-problem { border-color: var(--danger) !important; }
-/* Cash, Card and Other fit on one row (the base style has room for two). */
-.methods:has(> :nth-child(3)) { grid-template-columns: repeat(3, 1fr); }
+/* Cash, Card, Bank transfer and Other sit in two columns so every button is wide and at least 56px tall. */
+.methods .btn { min-height: 56px; overflow-wrap: anywhere; }
 
 /* Wide amounts such as "Rs 352,024.57" must stay inside their boxes. These sit at the end on purpose,
    so no existing rule is edited. */
