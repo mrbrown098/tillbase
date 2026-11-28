@@ -40,7 +40,10 @@ export interface ProfitAndLoss {
 
   salesCount: number;
   voidCount: number;
-  /** Sales before tax and after discounts. This is the revenue figure. */
+  /** Refunds made in this period, and what they handed back before tax. Already taken off `netSalesMinor`. */
+  refundCount: number;
+  refundsMinor: number;
+  /** Sales before tax and after discounts, less refunds. This is the revenue figure. */
   netSalesMinor: number;
   discountsMinor: number;
   /** Sales tax collected for the government. Not income. */
@@ -153,6 +156,25 @@ export class FinanceService {
       h.salesMinor += net;
       hourMap.set(hour, h);
     }
+    // Refunds count on the day they were made. They take back revenue and tax; the cost of the goods comes off
+    // only when the goods went back into stock (otherwise they were still used up).
+    const refundRows = this.db
+      .prepare("SELECT created_at AS at, amount_minor AS amount, tax_minor AS tax, cogs_minor AS cogs FROM refunds WHERE created_at >= ? AND created_at < ?")
+      .all(startIso, endIso) as { at: string; amount: number; tax: number; cogs: number }[];
+    let refundsNet = 0;
+    for (const r of refundRows) {
+      const net = r.amount - r.tax;
+      refundsNet += net;
+      netSales -= net;
+      tax -= r.tax;
+      cogs -= r.cogs;
+      const day = dayMap.get(localDate(r.at));
+      if (day) {
+        day.salesMinor -= net;
+        day.cogsMinor -= r.cogs;
+        day.grossProfitMinor -= net - r.cogs;
+      }
+    }
     const grossProfit = netSales - cogs;
 
     // ---- Items --------------------------------------------------------------
@@ -166,6 +188,25 @@ export class FinanceService {
           GROUP BY si.product_id`,
       )
       .all(startIso, endIso) as { productId: string; name: string; qty: number; sales: number; cogs: number; isSystem: number }[];
+    const refundedItems = new Map(
+      (
+        this.db
+          .prepare(
+            `SELECT si.product_id AS productId, SUM(ri.qty) AS qty, SUM(ri.amount_minor - ri.tax_minor) AS sales, SUM(ri.cogs_minor) AS cogs
+               FROM refund_items ri JOIN refunds r ON r.id = ri.refund_id JOIN sale_items si ON si.id = ri.sale_item_id
+              WHERE r.created_at >= ? AND r.created_at < ? GROUP BY si.product_id`,
+          )
+          .all(startIso, endIso) as { productId: string; qty: number; sales: number; cogs: number }[]
+      ).map((r) => [r.productId, r]),
+    );
+    for (const r of itemRows) {
+      const back = refundedItems.get(r.productId);
+      if (back) {
+        r.qty -= back.qty;
+        r.sales -= back.sales;
+        r.cogs -= back.cogs;
+      }
+    }
     const items: ItemProfit[] = itemRows
       .map((r) => ({
         productId: r.productId,
@@ -236,6 +277,8 @@ export class FinanceService {
       days: daysInclusive(from, to),
       salesCount: sales.length,
       voidCount,
+      refundCount: refundRows.length,
+      refundsMinor: refundsNet,
       netSalesMinor: netSales,
       discountsMinor: discounts,
       taxCollectedMinor: tax,

@@ -351,8 +351,8 @@ export class SaleService {
         .prepare(
           `INSERT INTO sales (id, receipt_no, status, subtotal_minor, discount_minor,
              tax_minor, total_minor, paid_minor, change_minor, cashier, created_at,
-             shift_id, user_id, customer_id, points_earned, points_redeemed, on_account_minor, request_id)
-           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             shift_id, user_id, customer_id, points_earned, points_redeemed, on_account_minor, request_id, items_linked)
+           VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
         )
         .run(
           saleId,
@@ -381,12 +381,13 @@ export class SaleService {
       );
       const insMove = this.db.prepare(
         `INSERT INTO stock_movements
-           (id, product_id, qty_delta, reason, ref_type, ref_id, created_at, value_minor)
-         VALUES (?, ?, ?, 'sale', 'sale', ?, ?, ?)`,
+           (id, product_id, qty_delta, reason, ref_type, ref_id, created_at, value_minor, sale_item_id)
+         VALUES (?, ?, ?, 'sale', 'sale', ?, ?, ?, ?)`,
       );
       for (const x of priced) {
+        const itemId = randomUUID();
         insItem.run(
-          randomUUID(),
+          itemId,
           saleId,
           x.p.id,
           x.p.name,
@@ -400,7 +401,7 @@ export class SaleService {
         );
         for (const u of x.uses) {
           if (u.track) {
-            insMove.run(randomUUID(), u.productId, -u.qty, saleId, now, -Math.round(u.qty * u.avgCost));
+            insMove.run(randomUUID(), u.productId, -u.qty, saleId, now, -Math.round(u.qty * u.avgCost), itemId);
           }
         }
       }
@@ -441,6 +442,8 @@ export class SaleService {
         .get(saleId) as { status: string } | undefined;
       if (!sale) throw new Error(`Sale not found: ${saleId}`);
       if (sale.status === "void") throw new Error("Sale is already void");
+      const refunded = this.db.prepare("SELECT COUNT(*) AS n FROM refunds WHERE sale_id = ?").get(saleId) as { n: number };
+      if (refunded.n > 0) throw new Error("Part of this sale has already been refunded, so it cannot be voided. Refund the rest instead");
 
       const now = new Date().toISOString();
       this.db

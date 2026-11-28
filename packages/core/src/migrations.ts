@@ -541,6 +541,70 @@ export const migrations: Migration[] = [
       CREATE UNIQUE INDEX idx_sales_request ON sales(request_id) WHERE request_id IS NOT NULL;
     `,
   },
+  {
+    version: 11,
+    sql: `
+      -- Refunds: part of a sale handed back, by line, with a reason. A refund never edits the sale, its shift or
+      -- its stock movements: it is its own record, dated when it was made, and it cannot be changed or removed.
+      CREATE TABLE refunds (
+        id              TEXT PRIMARY KEY,
+        sale_id         TEXT NOT NULL REFERENCES sales(id),
+        shift_id        TEXT REFERENCES shifts(id),
+        user_id         TEXT NOT NULL,
+        user_name       TEXT NOT NULL,
+        reason          TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        method          TEXT NOT NULL CHECK (method IN ('cash', 'card', 'bank_transfer', 'other')),
+        reference       TEXT,
+        restock         INTEGER NOT NULL CHECK (restock IN (0, 1)),
+        amount_minor    INTEGER NOT NULL CHECK (amount_minor > 0),
+        tax_minor       INTEGER NOT NULL CHECK (tax_minor >= 0),
+        -- cost of the goods taken back into stock (0 when nothing was restocked)
+        cogs_minor      INTEGER NOT NULL CHECK (cogs_minor >= 0),
+        -- loyalty points taken back because of this refund
+        points_reversed INTEGER NOT NULL DEFAULT 0,
+        request_id      TEXT,
+        created_at      TEXT NOT NULL
+      );
+      CREATE INDEX idx_refunds_sale ON refunds(sale_id);
+      CREATE INDEX idx_refunds_created ON refunds(created_at);
+      CREATE INDEX idx_refunds_shift ON refunds(shift_id);
+      CREATE UNIQUE INDEX idx_refunds_request ON refunds(request_id) WHERE request_id IS NOT NULL;
+
+      CREATE TABLE refund_items (
+        id           TEXT PRIMARY KEY,
+        refund_id    TEXT NOT NULL REFERENCES refunds(id),
+        sale_item_id TEXT NOT NULL REFERENCES sale_items(id),
+        qty          REAL NOT NULL CHECK (qty > 0),
+        amount_minor INTEGER NOT NULL CHECK (amount_minor >= 0),
+        tax_minor    INTEGER NOT NULL CHECK (tax_minor >= 0),
+        cogs_minor   INTEGER NOT NULL CHECK (cogs_minor >= 0),
+        restocked    INTEGER NOT NULL CHECK (restocked IN (0, 1))
+      );
+      CREATE INDEX idx_refund_items_refund ON refund_items(refund_id);
+      CREATE INDEX idx_refund_items_sale_item ON refund_items(sale_item_id);
+
+      CREATE TRIGGER refunds_no_update BEFORE UPDATE ON refunds
+      BEGIN SELECT RAISE(ABORT, 'A refund cannot be changed.'); END;
+      CREATE TRIGGER refunds_no_delete BEFORE DELETE ON refunds
+      BEGIN SELECT RAISE(ABORT, 'A refund cannot be removed.'); END;
+      CREATE TRIGGER refund_items_no_update BEFORE UPDATE ON refund_items
+      BEGIN SELECT RAISE(ABORT, 'A refund cannot be changed.'); END;
+      CREATE TRIGGER refund_items_no_delete BEFORE DELETE ON refund_items
+      BEGIN SELECT RAISE(ABORT, 'A refund cannot be removed.'); END;
+
+      -- Which sale line a stock movement belongs to, so a refund can put back exactly what that line used.
+      -- Sales made before this version have no link; they can still be refunded without restocking.
+      ALTER TABLE stock_movements ADD COLUMN sale_item_id TEXT;
+      CREATE INDEX idx_stock_sale_item ON stock_movements(sale_item_id) WHERE sale_item_id IS NOT NULL;
+
+      -- What a cash movement was for (a refund or a void), so cash handed back is easy to find and total.
+      -- 1 for sales whose stock movements are linked to their lines (every sale from this version on).
+      ALTER TABLE sales ADD COLUMN items_linked INTEGER NOT NULL DEFAULT 0;
+
+      ALTER TABLE cash_movements ADD COLUMN ref_type TEXT;
+      ALTER TABLE cash_movements ADD COLUMN ref_id TEXT;
+    `,
+  },
 ];
 
 /** Apply any migrations that have not run yet. Safe to call on every start. */

@@ -343,3 +343,50 @@ describe("bank transfer and repeated checkouts", () => {
     expect(sum.expectedCashMinor).toBe(10_000); // the float only
   });
 });
+
+describe("refunds", () => {
+  it("is for managers and owners, needs an open shift, and takes cash from today's drawer", async () => {
+    await ready();
+    const p = await api.createProduct({ name: "Tea", priceMinor: 10_000, taxRateBp: 0, trackStock: false });
+    const { sale } = await api.checkout({ lines: [{ productId: p.id, qty: 2 }], payments: [{ method: "cash", amountMinor: 20_000 }] });
+    const line = sale.items[0]!.id;
+    const input = { saleId: sale.id, lines: [{ saleItemId: line, qty: 1 }], reason: "customer changed mind", restock: false, method: "cash" as const };
+
+    const cashier = await makeStaff("Ali", "cashier");
+    const manager = await makeStaff("Mona", "manager", "3333");
+    await api.logout();
+    await api.login(cashier.id, cashier.pin);
+    await expect(api.refundSale(input)).rejects.toThrow(/permission/);
+    await expect(api.refundableSale(sale.id)).rejects.toThrow(/permission/);
+    await api.logout();
+
+    // a manager is allowed, but only while a shift is open
+    await api.login(manager.id, manager.pin);
+    await api.closeShift(30_000);
+    await expect(api.refundSale(input)).rejects.toThrow(/shift/i);
+    await api.openShift(20_000);
+    await expect(api.refundSale(input)).resolves.toMatchObject({ amountMinor: 10_000, userName: "Mona" });
+  });
+
+  it("a manager refunds from the open shift; a void of an earlier shift's sale is recorded as cash out", async () => {
+    await ready();
+    const p = await api.createProduct({ name: "Tea", priceMinor: 10_000, taxRateBp: 0, trackStock: false });
+    const a = await api.checkout({ lines: [{ productId: p.id, qty: 2 }], payments: [{ method: "cash", amountMinor: 20_000 }] });
+    const b = await api.checkout({ lines: [{ productId: p.id, qty: 1 }], payments: [{ method: "cash", amountMinor: 10_000 }] });
+    const refund = await api.refundSale({ saleId: a.sale.id, lines: [{ saleItemId: a.sale.items[0]!.id, qty: 1 }], reason: "cold", restock: false, method: "cash" });
+    expect(refund).toMatchObject({ amountMinor: 10_000, method: "cash", userName: "Boss" });
+    const open = await api.shiftSummary();
+    expect(open).toMatchObject({ refundCashOutMinor: 10_000, expectedCashMinor: 10_000 + 30_000 - 10_000 });
+    expect((await api.refundableSale(a.sale.id)).lines[0]).toMatchObject({ remainingQty: 1 });
+    expect(await api.recentRefunds()).toHaveLength(1);
+    await expect(api.voidSale(a.sale.id, "oops")).rejects.toThrow(/already been refunded/);
+
+    // close the shift, open a new one, and void the other sale: the cash goes out of the new drawer, the old shift is untouched
+    const closed = await api.closeShift(40_000 - 10_000 + 10_000 - 10_000 + 0);
+    const frozen = JSON.stringify(await api.shiftSummary(closed.shift.id));
+    await api.openShift(50_000);
+    await api.voidSale(b.sale.id, "rung twice");
+    expect(JSON.stringify(await api.shiftSummary(closed.shift.id))).toBe(frozen);
+    expect(await api.shiftSummary()).toMatchObject({ cashOutMinor: 10_000, refundCashOutMinor: 10_000, expectedCashMinor: 40_000 });
+  });
+});
