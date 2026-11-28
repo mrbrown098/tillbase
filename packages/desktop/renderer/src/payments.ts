@@ -1,6 +1,6 @@
-import type { PaymentInput, PaymentMethod } from "@tillbase/core";
+import type { PaymentInput, SalePaymentMethod } from "@tillbase/core";
 
-export const methodLabel: Record<PaymentMethod, string> = { cash: "Cash", card: "Card", other: "Other" };
+export const methodLabel: Record<SalePaymentMethod, string> = { cash: "Cash", card: "Card", bank_transfer: "Bank transfer", other: "Other" };
 
 export interface PaymentSummary {
   /** Everything entered so far. */

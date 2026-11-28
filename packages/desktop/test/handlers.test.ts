@@ -327,3 +327,19 @@ describe("staff management", () => {
     expect(json).not.toMatch(/pin_hash|pin_salt|pinHash/);
   });
 });
+
+describe("bank transfer and repeated checkouts", () => {
+  it("takes a bank transfer that leaves the drawer alone, and a double click sells once", async () => {
+    await ready();
+    const p = await api.createProduct({ name: "Samosa", priceMinor: 5_000, taxRateBp: 0, trackStock: false });
+    const input = { lines: [{ productId: p.id, qty: 2 }], payments: [{ method: "bank_transfer" as const, amountMinor: 10_000, reference: "IBFT 7781" }], requestId: "pos-click-0001" };
+    // a double click: two calls before the screen has had its answer
+    const [a, b] = await Promise.all([api.checkout(input), api.checkout(input)]);
+    expect(b.sale.id).toBe(a.sale.id);
+    expect(a.sale.payments[0]).toMatchObject({ method: "bank_transfer", reference: "IBFT 7781" });
+    expect(await api.recentSales(10)).toHaveLength(1);
+    const sum = await api.shiftSummary();
+    expect(sum.byMethod).toEqual({ bank_transfer: 10_000 });
+    expect(sum.expectedCashMinor).toBe(10_000); // the float only
+  });
+});

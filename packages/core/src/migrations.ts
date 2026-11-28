@@ -516,6 +516,31 @@ export const migrations: Migration[] = [
       ALTER TABLE sales ADD COLUMN on_account_minor INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 10,
+    sql: `
+      -- Bank transfer as a way to pay, with an optional reference (transaction number or note), and a
+      -- request id on each sale so the same checkout sent twice (a double click) is only saved once.
+      -- The CHECK list on payments.method cannot be changed in place, so the table is rebuilt with the
+      -- new kind, keeping every row in order, as version 9 did for the ledger.
+      CREATE TABLE payments_new (
+        id           TEXT PRIMARY KEY,
+        sale_id      TEXT NOT NULL REFERENCES sales(id),
+        method       TEXT NOT NULL CHECK (method IN ('cash', 'card', 'bank_transfer', 'other')),
+        amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+        label        TEXT,
+        reference    TEXT
+      );
+      INSERT INTO payments_new (id, sale_id, method, amount_minor, label)
+        SELECT id, sale_id, method, amount_minor, label FROM payments ORDER BY rowid;
+      DROP TABLE payments;
+      ALTER TABLE payments_new RENAME TO payments;
+      CREATE INDEX idx_payments_sale ON payments(sale_id);
+
+      ALTER TABLE sales ADD COLUMN request_id TEXT;
+      CREATE UNIQUE INDEX idx_sales_request ON sales(request_id) WHERE request_id IS NOT NULL;
+    `,
+  },
 ];
 
 /** Apply any migrations that have not run yet. Safe to call on every start. */
