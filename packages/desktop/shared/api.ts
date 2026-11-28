@@ -231,6 +231,30 @@ export interface AuditQuery {
   beforeSeq?: number;
 }
 
+/** What is left to refund on one line of a sale. */
+export interface RefundableLine {
+  saleItemId: string;
+  productId: string;
+  name: string;
+  qty: number;
+  refundedQty: number;
+  remainingQty: number;
+  /** The whole line, tax included, after its own discount. */
+  lineTotalMinor: number;
+  /** What the remaining quantity would hand back, tax included. */
+  remainingMinor: number;
+}
+
+export interface RefundableSale {
+  saleId: string;
+  receiptNo: string;
+  /** False when the sale cannot be part-refunded; `blockedReason` says why in plain words. */
+  allowed: boolean;
+  blockedReason: string | null;
+  lines: RefundableLine[];
+  refunds: Refund[];
+}
+
 /** One shift as it appears on the day-close report. Cash figures for a closed shift never change afterwards. */
 export interface DayCloseShift {
   shiftId: string;
@@ -269,9 +293,11 @@ export interface DayCloseReport {
   billedMinor: number;
   voidCount: number;
   voidedMinor: number;
+  /** Sales rung on an earlier day and voided during this one. They come off this day, not the day they were rung. */
+  earlierSaleVoids: { count: number; amountMinor: number };
   refundCount: number;
   refundedMinor: number;
-  /** `billedMinor` minus `refundedMinor`. */
+  /** `billedMinor` minus `refundedMinor` minus the earlier-day voids. */
   netTakingsMinor: number;
 
   /** Money actually received, by method, after change given and refunds paid out. */
@@ -324,6 +350,15 @@ export interface TillbaseApi {
   recentSales(limit?: number): Promise<Sale[]>;
   receiptText(saleId: string): Promise<string>;
   voidSale(saleId: string, reason: string): Promise<Sale>;
+  /** Manager or owner. The money comes out of the open shift; closed shifts are never changed. */
+  refundSale(input: RefundInput): Promise<Refund>;
+  /** What is left to refund on a sale and why a sale cannot be part-refunded. */
+  refundableSale(saleId: string): Promise<RefundableSale>;
+  recentRefunds(limit?: number): Promise<Refund[]>;
+  /** Owner only. Newest first. */
+  listAudit(query?: AuditQuery): Promise<AuditEntry[]>;
+  /** Everything for one business day, computed in the core. Profit is null unless the user has `finance.view`. Needs `reports.view`. */
+  dayCloseReport(date: string): Promise<DayCloseReport>;
 
   // Shifts and cash
   openShift(openingCashMinor: number): Promise<SessionInfo>;
@@ -471,6 +506,8 @@ export interface TillbaseApi {
   /** Where receipts go (any signed-in user can read it, so screens know whether to print by themselves). */
   getPrinter(): Promise<PrinterConfig>;
   setPrinter(config: Partial<PrinterConfig>): Promise<PrinterConfig>;
+  /** Printers installed on this computer (needs `settings.manage`). Empty when the list cannot be read. */
+  listSystemPrinters(): Promise<{ name: string; isDefault: boolean }[]>;
   /** Print a sale's receipt (with the shop logo). Opens the cash drawer when the printer is set to and the sale took cash. */
   printReceipt(saleId: string): Promise<PrintResult>;
   printKitchenTicket(ticket: KitchenTicket): Promise<PrintResult>;
@@ -515,7 +552,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "checkout",
   "recentSales",
   "receiptText",
-  "voidSale",
+  "voidSale","refundSale","refundableSale","recentRefunds","listAudit","dayCloseReport",
   "openShift",
   "shiftSummary",
   "cashMovement",
@@ -550,6 +587,6 @@ export const channels: (keyof TillbaseApi)[] = [
   "resetPin",
   "changeOwnPin",
   "chooseProductCsv","productCsvTemplate","exportProductCsv","saveCsvFile","previewProductCsv","importProductCsv",
-  "getPrinter","setPrinter","printReceipt","printKitchenTicket","printStatement","printTestPage","openCashDrawer",
+  "getPrinter","setPrinter","listSystemPrinters","printReceipt","printKitchenTicket","printStatement","printTestPage","openCashDrawer",
   "getBusinessProfile","saveBusinessProfile","beginOnboarding","finishOnboarding","restartOnboarding",
 ];

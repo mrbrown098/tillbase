@@ -3,6 +3,7 @@ import {
   BackupManager,
   AccountingExportService,
   ExpenseService,
+  DayCloseService,
   FinanceService,
   InventoryService,
   BusinessProfileService,
@@ -19,6 +20,10 @@ import {
   ReportService,
   SaleService,
   SettingsService,
+  AuditService,
+  formatMoney,
+  RefundService,
+  queueAuditAfterRestore,
   ShiftService,
   UserService,
   can,
@@ -32,6 +37,7 @@ import {
   receiptJob,
   statementJob,
   permissionsOf,
+  type AuditInput,
   type Db,
   type JobOptions,
   type ImportResult,
@@ -52,7 +58,7 @@ import type {
 } from "../shared/api.js";
 import type { AdView } from "./ads.js";
 import type { UpdateInfo } from "./updates.js";
-import { logoRaster, sendToPrinter, type DecodeFn } from "./printing.js";
+import { logoRaster, sendToPrinter, sendToSystemPrinter, type DecodeFn } from "./printing.js";
 
 /**
  * The real implementation of the app's API. It has no Electron imports, so it
@@ -72,6 +78,8 @@ export function createHandlers(
     backups?: BackupManager;
     /** Called after a restore has swapped the data in: the app must restart. */
     afterRestore?: () => void;
+    /** Where the database file is. Needed so a restore can leave a note in the audit trail of the restored data. */
+    dbPath?: string;
     afterShiftClose?: () => void;
     /** Sponsor line and update check, supplied by the Electron main process (tests pass fakes). */
     ads?: { current: () => Promise<AdView | null>; open: (id: string) => Promise<void> };
@@ -80,6 +88,10 @@ export function createHandlers(
     /** Receipt printer plumbing. Tests replace these so no real printer or Electron is needed. */
     printing?: {
       send?: (host: string, port: number, bytes: Uint8Array) => Promise<void>;
+      /** Send to a printer installed on this computer. */
+      sendSystem?: (name: string, bytes: Uint8Array) => Promise<void>;
+      /** The printers this computer has (from Electron in the real app). */
+      listSystem?: () => Promise<{ name: string; isDefault: boolean }[]>;
       decodeLogo?: DecodeFn;
     };
     /** Native file dialogs, supplied by the Electron main process. Each returns null if the person cancels. */
@@ -104,10 +116,31 @@ export function createHandlers(
   const expenses = new ExpenseService(db);
   const labour = new LabourService(db);
   const finance = new FinanceService(db);
+  const dayClose = new DayCloseService(db);
   const accounting = new AccountingExportService(db);
   const orders = new OrderService(db, receiptPrefix);
   const productCsv = new ProductCsvService(db);
   const customers = new CustomerService(db);
+  const refunds = new RefundService(db);
+  const audit = new AuditService(db);
+  /** Write one line of the audit trail. Call it inside the transaction of the thing it describes. */
+  const note = (user: User | null, e: Omit<AuditInput, "userId" | "userName">) =>
+    audit.record({ ...e, userId: user?.id ?? null, userName: user?.name ?? null });
+  /** One entry for a settings change, listing only the values that changed (an image is noted, not stored). */
+  const noteSettings = (user: User | null, before: Record<string, unknown>, after: Record<string, unknown>, what = "Settings") => {
+    const changed: Record<string, { from: unknown; to: unknown }> = {};
+    for (const k of Object.keys(after)) {
+      if (JSON.stringify(before[k]) === JSON.stringify(after[k])) continue;
+      const big = (v: unknown) => (typeof v === "string" && v.length > 200 ? "[image or long text]" : v);
+      changed[k] = { from: big(before[k]), to: big(after[k]) };
+    }
+    if (Object.keys(changed).length === 0) return;
+    note(user, { action: "settings.update", entity: "settings", summary: `${what} changed: ${Object.keys(changed).join(", ")}`, detail: { changed } });
+  };
+  const moneyText = (minor: number) => {
+    const s = settings.get();
+    return formatMoney(minor, s.currency, s.locale);
+  };
   const printerConfig = new PrinterConfigService(db);
   const business = new BusinessProfileService(db);
 
@@ -195,15 +228,21 @@ export function createHandlers(
    * Build and send one print job. This never throws: if no printer is set up it says so (the screen then uses the
    * system print window), and if the printer cannot be reached it returns a plain message, so a sale is never held up.
    */
+  const isSet = (cfg: { transport: string; systemName: string; host: string }) => (cfg.transport === "system" ? !!cfg.systemName : !!cfg.host);
+  const deliver = (cfg: { transport: string; systemName: string; host: string; port: number }, bytes: Uint8Array) =>
+    cfg.transport === "system"
+      ? (hooks.printing?.sendSystem ?? sendToSystemPrinter)(cfg.systemName, bytes)
+      : (hooks.printing?.send ?? sendToPrinter)(cfg.host, cfg.port, bytes);
+
   const sendJob = async (build: (o: JobOptions & { chars: number }) => Uint8Array, opts: { logo?: boolean; drawer?: boolean } = {}): Promise<PrintResult> => {
     const cfg = printerConfig.get();
-    if (!cfg.host) return { status: "no_printer" };
+    if (!isSet(cfg)) return { status: "no_printer" };
     try {
       const s = settings.get();
       const paper = paperForWidth(s.receiptWidth);
       const logo = opts.logo ? await logoRaster(s.businessLogo, paper, hooks.printing?.decodeLogo) : null;
       const bytes = build({ paper, logo, openDrawer: !!opts.drawer && cfg.openDrawer, chars: PAPER_CHARS[paper] });
-      await (hooks.printing?.send ?? sendToPrinter)(cfg.host, cfg.port, bytes);
+      await deliver(cfg, bytes);
       return { status: "printed" };
     } catch (e) {
       return { status: "failed", message: e instanceof Error && e.message ? e.message : "The receipt printer did not answer." };
@@ -253,7 +292,20 @@ export function createHandlers(
       return sessionInfo();
     },
     async login(userId, pin) {
-      current = users.authenticate(userId, pin);
+      try {
+        current = users.authenticate(userId, pin);
+      } catch (e) {
+        // Wrong PINs and lock-outs are recorded (never the PIN). Nobody is signed in, so there is no actor.
+        const who = users.get(userId);
+        note(null, {
+          action: "login.failed",
+          entity: "user",
+          entityId: userId,
+          summary: `Failed sign-in${who ? ` for ${who.name}` : ""}: ${(e as Error).message}`,
+          detail: { name: who?.name ?? null, role: who?.role ?? null },
+        });
+        throw e;
+      }
       return sessionInfo();
     },
     async logout() {
@@ -285,12 +337,32 @@ export function createHandlers(
         authorize("discount");
       }
       const shift = openShiftOrThrow();
-      const sale = sales.checkout({
-        ...input,
-        shiftId: shift.id,
-        userId: user.id,
-        cashier: user.name,
-      });
+      const sale = db.transaction(() => {
+        const made = sales.checkout({
+          ...input,
+          shiftId: shift.id,
+          userId: user.id,
+          cashier: user.name,
+        });
+        const overrides = input.lines
+          .filter((l) => (l.discountMinor ?? 0) > 0 || l.unitPriceMinor !== undefined)
+          .map((l) => {
+            const p = products.get(l.productId);
+            return { name: p?.name ?? l.productId, listPriceMinor: p?.priceMinor ?? null, soldAtMinor: l.unitPriceMinor ?? p?.priceMinor ?? null, discountMinor: l.discountMinor ?? 0 };
+          })
+          .filter((o) => o.discountMinor > 0 || (o.soldAtMinor !== null && o.soldAtMinor !== o.listPriceMinor));
+        // A repeated request returns the sale that is already saved: it must not be noted twice.
+        if (overrides.length > 0 && !audit.has("sale.discount", made.id)) {
+          note(user, {
+            action: "sale.discount",
+            entity: "sale",
+            entityId: made.id,
+            summary: `Discount or price change on ${made.receiptNo}`,
+            detail: { receiptNo: made.receiptNo, totalMinor: made.totalMinor, lines: overrides },
+          });
+        }
+        return made;
+      })();
       return { sale, receipt: receipt(sale) };
     },
     async recentSales(limit = 50) {
@@ -317,14 +389,52 @@ export function createHandlers(
             sale.changeMinor;
           if (cash > 0) {
             try {
-              shifts.addCashMovement(shift.id, user.id, -cash, `Refund for voided ${sale.receiptNo}`);
+              shifts.addCashMovement(shift.id, user.id, -cash, `Refund for voided ${sale.receiptNo}`, { type: "void", id: sale.id });
             } catch {
               throw new Error("There is not enough cash in the drawer to refund this sale");
             }
           }
         }
-        return sales.voidSale(saleId, reason);
+        const voided = sales.voidSale(saleId, reason);
+        note(user, {
+          action: "sale.void",
+          entity: "sale",
+          entityId: saleId,
+          summary: `Voided ${sale.receiptNo} (${moneyText(sale.totalMinor)}): ${reason.trim()}`,
+          detail: { receiptNo: sale.receiptNo, totalMinor: sale.totalMinor, reason: reason.trim(), fromEarlierShift: sale.shiftId !== shift.id },
+        });
+        return voided;
       })();
+    },
+
+    async refundSale(input) {
+      const user = authorize("refund");
+      const shift = openShiftOrThrow();
+      return db.transaction(() => {
+        const r = refunds.refund(input, { userId: user.id, userName: user.name, shiftId: shift.id });
+        if (!audit.has("sale.refund", r.id)) {
+          note(user, {
+            action: "sale.refund",
+            entity: "refund",
+            entityId: r.id,
+            summary: `Refunded ${moneyText(r.amountMinor)} on ${r.receiptNo} by ${r.method.replace("_", " ")}: ${r.reason}`,
+            detail: { saleId: r.saleId, receiptNo: r.receiptNo, amountMinor: r.amountMinor, method: r.method, restock: r.restock, reference: r.reference, lines: r.lines.map((l) => ({ name: l.name, qty: l.qty, amountMinor: l.amountMinor })) },
+          });
+        }
+        return r;
+      })();
+    },
+    async refundableSale(saleId) {
+      authorize("refund");
+      return refunds.refundable(saleId);
+    },
+    async listAudit(query) {
+      authorize("audit.view");
+      return audit.list(query ?? {});
+    },
+    async recentRefunds(limit = 50) {
+      authorize("refund");
+      return refunds.recent(limit);
     },
 
     // ---- Shifts and cash ----------------------------------------------
@@ -349,7 +459,10 @@ export function createHandlers(
     async cashMovement(amountMinor, reason) {
       const user = authorize("cash.movement");
       const shift = openShiftOrThrow();
-      shifts.addCashMovement(shift.id, user.id, amountMinor, reason);
+      db.transaction(() => {
+        shifts.addCashMovement(shift.id, user.id, amountMinor, reason);
+        note(user, { action: "cash.movement", entity: "shift", entityId: shift.id, summary: `${amountMinor > 0 ? "Cash put in" : "Cash taken out"}: ${moneyText(Math.abs(amountMinor))} (${reason.trim()})`, detail: { amountMinor, reason: reason.trim() } });
+      })();
       return view(shifts.summary(shift.id), user);
     },
     async closeShift(countedCashMinor, note) {
@@ -358,7 +471,19 @@ export function createHandlers(
       if (shift.userId !== user.id && !can(user.role, "shifts.manage_all")) {
         throw new Error("Only the person who opened the shift, or a manager, can close it");
       }
-      const closed = view(shifts.close(shift.id, countedCashMinor, note), user);
+      const closed = db.transaction(() => {
+        const sum = shifts.close(shift.id, countedCashMinor, note);
+        audit.record({
+          userId: user.id,
+          userName: user.name,
+          action: "shift.close",
+          entity: "shift",
+          entityId: shift.id,
+          summary: `Closed shift: counted ${moneyText(countedCashMinor)}, expected ${moneyText(sum.expectedCashMinor)}`,
+          detail: { expectedMinor: sum.expectedCashMinor, countedMinor: countedCashMinor, varianceMinor: countedCashMinor - sum.expectedCashMinor, note: note?.trim() || null },
+        });
+        return view(sum, user);
+      })();
       hooks.afterShiftClose?.();
       return closed;
     },
@@ -369,25 +494,48 @@ export function createHandlers(
 
     // ---- Catalogue and stock ------------------------------------------
     async createProduct(input, openingStock) {
-      authorize("products.manage");
+      const user = authorize("products.manage");
       const created = db.transaction(() => {
         const p = products.create(input);
         if (openingStock !== undefined && openingStock !== 0) {
           inventory.adjust(p.id, openingStock, "opening stock");
+          note(user, { action: "stock.adjust", entity: "product", entityId: p.id, summary: `Opening stock for ${p.name}: ${openingStock}`, detail: { name: p.name, qtyDelta: openingStock, reason: "opening stock" } });
         }
         return p;
       })();
       return one(created.id);
     },
     async updateProduct(id, patch) {
-      authorize("products.manage");
-      products.update(id, patch);
+      const user = authorize("products.manage");
+      db.transaction(() => {
+        const before = products.get(id);
+        products.update(id, patch);
+        const after = products.get(id);
+        if (before && after && (before.priceMinor !== after.priceMinor || before.costMinor !== after.costMinor || before.taxRateBp !== after.taxRateBp)) {
+          note(user, {
+            action: "product.price",
+            entity: "product",
+            entityId: id,
+            summary: `Changed ${after.name}${before.priceMinor !== after.priceMinor ? `: price ${moneyText(before.priceMinor)} to ${moneyText(after.priceMinor)}` : ""}`,
+            detail: {
+              name: after.name,
+              priceMinor: { from: before.priceMinor, to: after.priceMinor },
+              costMinor: { from: before.costMinor, to: after.costMinor },
+              taxRateBp: { from: before.taxRateBp, to: after.taxRateBp },
+            },
+          });
+        }
+      })();
       return one(id);
     },
     async adjustStock(productId, qtyDelta, reason) {
-      authorize("stock.adjust");
-      if (!products.get(productId)) throw new Error("Product not found");
-      inventory.adjust(productId, qtyDelta, reason);
+      const user = authorize("stock.adjust");
+      const product = products.get(productId);
+      if (!product) throw new Error("Product not found");
+      db.transaction(() => {
+        inventory.adjust(productId, qtyDelta, reason);
+        note(user, { action: "stock.adjust", entity: "product", entityId: productId, summary: `Stock of ${product.name} changed by ${qtyDelta}: ${reason}`, detail: { name: product.name, qtyDelta, reason } });
+      })();
     },
     async lowStock() {
       authorize("reports.view");
@@ -553,8 +701,13 @@ export function createHandlers(
       return customers.config();
     },
     async setLoyalty(config) {
-      authorize("customers.manage");
-      return customers.setConfig(config);
+      const me = authorize("customers.manage");
+      return db.transaction(() => {
+        const before = customers.config() as unknown as Record<string, unknown>;
+        const after = customers.setConfig(config);
+        noteSettings(me, before, after as unknown as Record<string, unknown>, "Loyalty settings");
+        return after;
+      })();
     },
     // Splitting does not remove any food or change a price, so any seller may do it, even for items already sent.
     async splitOrder(orderId, picks) {
@@ -739,6 +892,11 @@ export function createHandlers(
     },
 
     // ---- Money in and out -----------------------------------------------
+    async dayCloseReport(date) {
+      const user = authorize("reports.view");
+      return dayClose.report(date, { includeProfit: can(user.role, "finance.view") });
+    },
+
     async profitAndLoss(from, to) {
       authorize("finance.view");
       return finance.profitAndLoss(from, to);
@@ -792,10 +950,26 @@ export function createHandlers(
       return needBackups().clearSecondFolder();
     },
     async restoreBackup(name, where) {
-      authorize("settings.manage");
+      const me = authorize("settings.manage");
       const manager = needBackups();
       // closeLive is called only after the backup has passed every check.
       manager.restore(name, where, () => db.close());
+      // The restore replaced the whole file, so the note is parked and written into the restored data on start.
+      if (hooks.dbPath && hooks.dbPath !== ":memory:") {
+        try {
+          queueAuditAfterRestore(hooks.dbPath, {
+            userId: me.id,
+            userName: me.name,
+            action: "backup.restore",
+            entity: "backup",
+            entityId: name,
+            summary: `Restored data from backup ${name} (${where === "second" ? "second place" : "this computer"})`,
+            detail: { name, where },
+          });
+        } catch {
+          /* the restore itself succeeded; never fail it over the note */
+        }
+      }
       current = null;
       hooks.afterRestore?.();
     },
@@ -806,8 +980,13 @@ export function createHandlers(
       return reports.salesSummary(from, to, 5);
     },
     async updateSettings(patch) {
-      authorize("settings.manage");
-      return settings.update(patch);
+      const me = authorize("settings.manage");
+      return db.transaction(() => {
+        const before = settings.get() as unknown as Record<string, unknown>;
+        const after = settings.update(patch);
+        noteSettings(me, before, after as unknown as Record<string, unknown>);
+        return after;
+      })();
     },
 
     // ---- Staff ---------------------------------------------------------
@@ -816,23 +995,45 @@ export function createHandlers(
       return users.list({ includeInactive: true });
     },
     async createStaff(input) {
-      authorize("users.manage");
-      return users.create(input);
+      const me = authorize("users.manage");
+      return db.transaction(() => {
+        const created = users.create(input);
+        note(me, { action: "user.create", entity: "user", entityId: created.id, summary: `Added ${created.name} as ${created.role}`, detail: { name: created.name, role: created.role } });
+        return created;
+      })();
     },
     async updateStaff(id, patch) {
       const me = authorize("users.manage");
-      const updated = users.update(id, patch);
+      const updated = db.transaction(() => {
+        const before = users.get(id);
+        const after = users.update(id, patch);
+        note(me, {
+          action: "user.update",
+          entity: "user",
+          entityId: id,
+          summary: `Changed ${after.name}${before && before.role !== after.role ? `: role ${before.role} to ${after.role}` : ""}${before && before.active !== after.active ? (after.active ? ": reactivated" : ": deactivated") : ""}`,
+          detail: { name: { from: before?.name ?? null, to: after.name }, role: { from: before?.role ?? null, to: after.role }, active: { from: before?.active ?? null, to: after.active } },
+        });
+        return after;
+      })();
       if (id === me.id) current = updated.active ? updated : null;
       return updated;
     },
     async resetPin(userId, newPin) {
-      authorize("users.manage");
-      users.changePin(userId, newPin);
+      const me = authorize("users.manage");
+      db.transaction(() => {
+        users.changePin(userId, newPin);
+        const who = users.get(userId);
+        note(me, { action: "user.pin_reset", entity: "user", entityId: userId, summary: `PIN reset for ${who?.name ?? "a user"}` });
+      })();
     },
     async changeOwnPin(currentPin, newPin) {
       const me = authorize();
       users.authenticate(me.id, currentPin);
-      users.changePin(me.id, newPin);
+      db.transaction(() => {
+        users.changePin(me.id, newPin);
+        note(me, { action: "user.pin_change", entity: "user", entityId: me.id, summary: `${me.name} changed their own PIN` });
+      })();
     },
 
     // ---- Menu items as CSV ----------------------------------------------
@@ -886,8 +1087,21 @@ export function createHandlers(
       return printerConfig.get();
     },
     async setPrinter(config) {
+      const me = authorize("settings.manage");
+      return db.transaction(() => {
+        const before = printerConfig.get() as unknown as Record<string, unknown>;
+        const after = printerConfig.set(config);
+        noteSettings(me, before, after as unknown as Record<string, unknown>, "Printer settings");
+        return after;
+      })();
+    },
+    async listSystemPrinters() {
       authorize("settings.manage");
-      return printerConfig.set(config);
+      try {
+        return (await hooks.printing?.listSystem?.()) ?? [];
+      } catch {
+        return [];
+      }
     },
     async printReceipt(saleId) {
       authorize("sell");
@@ -924,9 +1138,9 @@ export function createHandlers(
     async openCashDrawer() {
       authorize("cash.movement");
       const cfg = printerConfig.get();
-      if (!cfg.host) return { status: "no_printer" };
+      if (!isSet(cfg)) return { status: "no_printer" };
       try {
-        await (hooks.printing?.send ?? sendToPrinter)(cfg.host, cfg.port, drawerKickJob());
+        await deliver(cfg, drawerKickJob());
         return { status: "printed" };
       } catch (e) {
         return { status: "failed", message: e instanceof Error && e.message ? e.message : "The receipt printer did not answer." };
@@ -938,8 +1152,14 @@ export function createHandlers(
       return business.get();
     },
     async saveBusinessProfile(patch) {
-      authorize("settings.manage");
-      return business.save(patch);
+      const me = authorize("settings.manage");
+      return db.transaction(() => {
+        const before = business.get();
+        const after = business.save(patch);
+        // The first-run guide saves every step; only changes made once setup is finished are part of the trail.
+        if (before.status === "complete") noteSettings(me, before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>, "Business profile");
+        return after;
+      })();
     },
     async beginOnboarding(name, pin) {
       if (users.count() > 0) throw new Error("Setup has already been completed");

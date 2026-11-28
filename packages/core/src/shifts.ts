@@ -25,6 +25,8 @@ export interface ShiftSummary {
   cashSalesMinor: number;
   cashInMinor: number;
   cashOutMinor: number;
+  /** Part of `cashOutMinor` that was handed back to customers for refunds and voided sales. */
+  refundCashOutMinor: number;
   /** Opening float + cash sales + cash in - cash out. */
   expectedCashMinor: number;
   movements: { id: string; amountMinor: number; reason: string; createdAt: string }[];
@@ -103,7 +105,7 @@ export class ShiftService {
   }
 
   /** Cash put into (positive) or taken out of (negative) the drawer outside of sales. */
-  addCashMovement(shiftId: string, userId: string, amountMinor: number, reason: string): void {
+  addCashMovement(shiftId: string, userId: string, amountMinor: number, reason: string, ref?: { type: "refund" | "void"; id: string }): void {
     if (!Number.isInteger(amountMinor) || amountMinor === 0) {
       throw new Error("Amount must be a non-zero whole amount");
     }
@@ -115,31 +117,35 @@ export class ShiftService {
     }
     this.db
       .prepare(
-        `INSERT INTO cash_movements (id, shift_id, user_id, amount_minor, reason, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO cash_movements (id, shift_id, user_id, amount_minor, reason, created_at, ref_type, ref_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(randomUUID(), shiftId, userId, amountMinor, reason.trim(), new Date().toISOString());
+      .run(randomUUID(), shiftId, userId, amountMinor, reason.trim(), new Date().toISOString(), ref?.type ?? null, ref?.id ?? null);
   }
 
   summary(shiftId: string): ShiftSummary {
     const shift = this.mustGet(shiftId);
 
+    // A closed shift keeps the figures it closed with. A sale of that shift voided later is still counted
+    // here; the cash handed back for it is recorded in the shift that was open at the time.
+    const closedAt = shift.status === "closed" ? shift.closedAt : null;
+    const counted = `(s.status = 'completed' OR (s.status = 'void' AND ? IS NOT NULL AND s.voided_at >= ?))`;
     const totals = this.db
       .prepare(
         `SELECT COUNT(*) AS n, COALESCE(SUM(total_minor), 0) AS total,
                 COALESCE(SUM(change_minor), 0) AS change
-           FROM sales WHERE shift_id = ? AND status = 'completed'`,
+           FROM sales s WHERE s.shift_id = ? AND ${counted}`,
       )
-      .get(shiftId) as { n: number; total: number; change: number };
+      .get(shiftId, closedAt, closedAt) as { n: number; total: number; change: number };
 
     const byMethod: Record<string, number> = {};
     const rows = this.db
       .prepare(
         `SELECT p.method AS method, SUM(p.amount_minor) AS amount
            FROM payments p JOIN sales s ON s.id = p.sale_id
-          WHERE s.shift_id = ? AND s.status = 'completed' GROUP BY p.method`,
+          WHERE s.shift_id = ? AND ${counted} GROUP BY p.method`,
       )
-      .all(shiftId) as { method: string; amount: number }[];
+      .all(shiftId, closedAt, closedAt) as { method: string; amount: number }[];
     for (const r of rows) byMethod[r.method] = r.amount;
     // Change is handed back from the drawer, so cash kept = cash paid - change.
     const cashSales = (byMethod.cash ?? 0) - totals.change;
@@ -148,11 +154,12 @@ export class ShiftService {
     const movements = (
       this.db
         .prepare(
-          `SELECT id, amount_minor AS amountMinor, reason, created_at AS createdAt
+          `SELECT id, amount_minor AS amountMinor, reason, created_at AS createdAt, ref_type AS refType
              FROM cash_movements WHERE shift_id = ? ORDER BY created_at, rowid`,
         )
-        .all(shiftId) as { id: string; amountMinor: number; reason: string; createdAt: string }[]
+        .all(shiftId) as { id: string; amountMinor: number; reason: string; createdAt: string; refType: string | null }[]
     );
+    const refundOut = movements.filter((m) => m.amountMinor < 0 && m.refType !== null).reduce((s, m) => s - m.amountMinor, 0);
     const cashIn = movements.filter((m) => m.amountMinor > 0).reduce((s, m) => s + m.amountMinor, 0);
     const cashOut = movements.filter((m) => m.amountMinor < 0).reduce((s, m) => s - m.amountMinor, 0);
 
@@ -164,8 +171,9 @@ export class ShiftService {
       cashSalesMinor: cashSales,
       cashInMinor: cashIn,
       cashOutMinor: cashOut,
+      refundCashOutMinor: refundOut,
       expectedCashMinor: shift.openingCashMinor + cashSales + cashIn - cashOut,
-      movements,
+      movements: movements.map(({ refType: _t, ...m }) => m),
     };
   }
 
