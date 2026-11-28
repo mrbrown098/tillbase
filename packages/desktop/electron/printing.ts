@@ -1,4 +1,8 @@
+import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createRequire } from "node:module";
 import { rasterFromRgba, type PaperMm, type Raster, type Rgba } from "@tillbase/core";
 
@@ -58,6 +62,130 @@ export function describeNetworkError(e: NodeJS.ErrnoException, host: string, por
     default:
       return `Could not print to ${host}: ${e.code ?? e.message}.`;
   }
+}
+
+// ---- A printer installed on this computer (USB, or any printer in the system's print queue) ---------------------
+
+export interface RunResult { code: number | null; stderr: string; error?: NodeJS.ErrnoException }
+export type RunFn = (command: string, args: string[], opts: { env?: Record<string, string>; input?: Uint8Array }) => Promise<RunResult>;
+
+/** Run a program without a shell (so a printer name can never be read as a command) and collect how it ended. */
+export const runCommand: RunFn = (command, args, opts) =>
+  new Promise((resolve) => {
+    let stderr = "";
+    let child;
+    try {
+      child = spawn(command, args, { env: { ...process.env, ...opts.env }, windowsHide: true, stdio: ["pipe", "ignore", "pipe"] });
+    } catch (e) {
+      resolve({ code: null, stderr: "", error: e as NodeJS.ErrnoException });
+      return;
+    }
+    const timer = setTimeout(() => child.kill(), 20_000);
+    child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+    child.once("error", (error: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
+      resolve({ code: null, stderr, error });
+    });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code, stderr });
+    });
+    child.stdin.on("error", () => undefined);
+    child.stdin.end(opts.input ? Buffer.from(opts.input) : undefined);
+  });
+
+/**
+ * Windows: write the bytes to the print spooler with the RAW data type, so the printer receives ESC/POS exactly as
+ * built. The printer name and the file arrive through environment variables, never inside the script text.
+ */
+export const WINDOWS_RAW_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class TillbaseRaw {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+  public class DOCINFOA {
+    [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+    [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+  }
+  [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi)]
+  public static extern bool OpenPrinter(string name, out IntPtr h, IntPtr pd);
+  [DllImport("winspool.Drv", SetLastError = true)] public static extern bool ClosePrinter(IntPtr h);
+  [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi)]
+  public static extern bool StartDocPrinter(IntPtr h, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+  [DllImport("winspool.Drv", SetLastError = true)] public static extern bool EndDocPrinter(IntPtr h);
+  [DllImport("winspool.Drv", SetLastError = true)] public static extern bool StartPagePrinter(IntPtr h);
+  [DllImport("winspool.Drv", SetLastError = true)] public static extern bool EndPagePrinter(IntPtr h);
+  [DllImport("winspool.Drv", SetLastError = true)] public static extern bool WritePrinter(IntPtr h, IntPtr bytes, int count, out int written);
+  public static void Send(string printer, byte[] data) {
+    IntPtr h;
+    if (!OpenPrinter(printer, out h, IntPtr.Zero)) throw new Exception("NOPRINTER:" + Marshal.GetLastWin32Error());
+    try {
+      DOCINFOA di = new DOCINFOA(); di.pDocName = "Tillbase"; di.pDataType = "RAW";
+      if (!StartDocPrinter(h, 1, di)) throw new Exception("REJECTED:" + Marshal.GetLastWin32Error());
+      try {
+        StartPagePrinter(h);
+        IntPtr p = Marshal.AllocCoTaskMem(data.Length);
+        try {
+          Marshal.Copy(data, 0, p, data.Length);
+          int w;
+          if (!WritePrinter(h, p, data.Length, out w) || w != data.Length) throw new Exception("WRITE:" + Marshal.GetLastWin32Error());
+        } finally { Marshal.FreeCoTaskMem(p); }
+        EndPagePrinter(h);
+      } finally { EndDocPrinter(h); }
+    } finally { ClosePrinter(h); }
+  }
+}
+"@
+[TillbaseRaw]::Send($env:TILLBASE_PRINTER, [System.IO.File]::ReadAllBytes($env:TILLBASE_FILE))
+`;
+
+/** What the person should be told when the operating system says no. */
+export function describeSystemPrintError(name: string, r: RunResult): string {
+  if (r.error?.code === "ENOENT") return "This computer has no print service available to send the receipt. Use a network printer, or the print window.";
+  const text = `${r.stderr}`;
+  if (/NOPRINTER:/.test(text) || /(destination|printer).*(unknown|not (found|exist))/i.test(text)) {
+    return `Could not find a printer called "${name}" on this computer. Open the printer settings and choose it again.`;
+  }
+  if (/REJECTED:|WRITE:/.test(text) || /not accepting|rejected/i.test(text)) {
+    return `The printer "${name}" would not take the receipt. Check that it is switched on, connected, has paper, and is not paused.`;
+  }
+  return `Could not print to "${name}"${r.code !== null ? ` (error ${r.code})` : ""}. Check that it is switched on and connected.`;
+}
+
+/**
+ * Send ESC/POS bytes to a printer installed on this computer, without any print dialog.
+ * Windows: spooler RAW job through PowerShell. macOS and Linux: `lp -o raw` (CUPS).
+ * The printer must accept raw data (a "Generic / Text Only" queue or the maker's ESC/POS driver). A driver that
+ * only draws pages will print the command bytes as text; that is a setting to fix, not something Tillbase can detect.
+ */
+export async function sendToSystemPrinter(
+  name: string,
+  bytes: Uint8Array,
+  opts: { platform?: NodeJS.Platform; run?: RunFn } = {},
+): Promise<void> {
+  if (!name.trim()) throw new PrintError("No printer is chosen. Open the printer settings and choose one.");
+  const platform = opts.platform ?? process.platform;
+  const run = opts.run ?? runCommand;
+  let result: RunResult;
+  if (platform === "win32") {
+    const dir = await mkdtemp(join(tmpdir(), "tillbase-print-"));
+    try {
+      const file = join(dir, "job.bin");
+      await writeFile(file, bytes);
+      const encoded = Buffer.from(WINDOWS_RAW_SCRIPT, "utf16le").toString("base64");
+      result = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], {
+        env: { TILLBASE_PRINTER: name, TILLBASE_FILE: file },
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  } else {
+    result = await run("lp", ["-d", name, "-o", "raw", "-t", "Tillbase"], { input: bytes });
+  }
+  if (result.error || result.code !== 0) throw new PrintError(describeSystemPrintError(name, result));
 }
 
 // ---- The shop logo ----------------------------------------------------------------------------------------------

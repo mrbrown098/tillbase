@@ -58,7 +58,7 @@ import type {
 } from "../shared/api.js";
 import type { AdView } from "./ads.js";
 import type { UpdateInfo } from "./updates.js";
-import { logoRaster, sendToPrinter, type DecodeFn } from "./printing.js";
+import { logoRaster, sendToPrinter, sendToSystemPrinter, type DecodeFn } from "./printing.js";
 
 /**
  * The real implementation of the app's API. It has no Electron imports, so it
@@ -88,6 +88,10 @@ export function createHandlers(
     /** Receipt printer plumbing. Tests replace these so no real printer or Electron is needed. */
     printing?: {
       send?: (host: string, port: number, bytes: Uint8Array) => Promise<void>;
+      /** Send to a printer installed on this computer. */
+      sendSystem?: (name: string, bytes: Uint8Array) => Promise<void>;
+      /** The printers this computer has (from Electron in the real app). */
+      listSystem?: () => Promise<{ name: string; isDefault: boolean }[]>;
       decodeLogo?: DecodeFn;
     };
     /** Native file dialogs, supplied by the Electron main process. Each returns null if the person cancels. */
@@ -224,15 +228,21 @@ export function createHandlers(
    * Build and send one print job. This never throws: if no printer is set up it says so (the screen then uses the
    * system print window), and if the printer cannot be reached it returns a plain message, so a sale is never held up.
    */
+  const isSet = (cfg: { transport: string; systemName: string; host: string }) => (cfg.transport === "system" ? !!cfg.systemName : !!cfg.host);
+  const deliver = (cfg: { transport: string; systemName: string; host: string; port: number }, bytes: Uint8Array) =>
+    cfg.transport === "system"
+      ? (hooks.printing?.sendSystem ?? sendToSystemPrinter)(cfg.systemName, bytes)
+      : (hooks.printing?.send ?? sendToPrinter)(cfg.host, cfg.port, bytes);
+
   const sendJob = async (build: (o: JobOptions & { chars: number }) => Uint8Array, opts: { logo?: boolean; drawer?: boolean } = {}): Promise<PrintResult> => {
     const cfg = printerConfig.get();
-    if (!cfg.host) return { status: "no_printer" };
+    if (!isSet(cfg)) return { status: "no_printer" };
     try {
       const s = settings.get();
       const paper = paperForWidth(s.receiptWidth);
       const logo = opts.logo ? await logoRaster(s.businessLogo, paper, hooks.printing?.decodeLogo) : null;
       const bytes = build({ paper, logo, openDrawer: !!opts.drawer && cfg.openDrawer, chars: PAPER_CHARS[paper] });
-      await (hooks.printing?.send ?? sendToPrinter)(cfg.host, cfg.port, bytes);
+      await deliver(cfg, bytes);
       return { status: "printed" };
     } catch (e) {
       return { status: "failed", message: e instanceof Error && e.message ? e.message : "The receipt printer did not answer." };
@@ -1085,6 +1095,14 @@ export function createHandlers(
         return after;
       })();
     },
+    async listSystemPrinters() {
+      authorize("settings.manage");
+      try {
+        return (await hooks.printing?.listSystem?.()) ?? [];
+      } catch {
+        return [];
+      }
+    },
     async printReceipt(saleId) {
       authorize("sell");
       const sale = sales.get(saleId);
@@ -1120,9 +1138,9 @@ export function createHandlers(
     async openCashDrawer() {
       authorize("cash.movement");
       const cfg = printerConfig.get();
-      if (!cfg.host) return { status: "no_printer" };
+      if (!isSet(cfg)) return { status: "no_printer" };
       try {
-        await (hooks.printing?.send ?? sendToPrinter)(cfg.host, cfg.port, drawerKickJob());
+        await deliver(cfg, drawerKickJob());
         return { status: "printed" };
       } catch (e) {
         return { status: "failed", message: e instanceof Error && e.message ? e.message : "The receipt printer did not answer." };
