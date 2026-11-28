@@ -62,9 +62,9 @@ describe("the printing calls are wired through", () => {
 
 describe("printer settings", () => {
   it("starts with no printer and port 9100, and saves what the owner sets", async () => {
-    expect(await api.getPrinter()).toEqual({ host: "", port: 9100, openDrawer: false });
-    expect(await api.setPrinter({ host: " 192.168.1.50 ", openDrawer: true })).toEqual({ host: "192.168.1.50", port: 9100, openDrawer: true });
-    expect(await api.getPrinter()).toEqual({ host: "192.168.1.50", port: 9100, openDrawer: true });
+    expect(await api.getPrinter()).toEqual({ host: "", port: 9100, openDrawer: false, transport: "network", systemName: "" });
+    expect(await api.setPrinter({ host: " 192.168.1.50 ", openDrawer: true })).toEqual({ host: "192.168.1.50", port: 9100, openDrawer: true, transport: "network", systemName: "" });
+    expect(await api.getPrinter()).toEqual({ host: "192.168.1.50", port: 9100, openDrawer: true, transport: "network", systemName: "" });
     expect((await api.setPrinter({ host: "" })).host).toBe("");
   });
 

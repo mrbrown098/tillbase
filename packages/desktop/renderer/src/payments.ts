@@ -1,6 +1,18 @@
-import type { PaymentInput, PaymentMethod } from "@tillbase/core";
+import type { PaymentInput, SalePaymentMethod } from "@tillbase/core";
 
-export const methodLabel: Record<PaymentMethod, string> = { cash: "Cash", card: "Card", other: "Other" };
+export const methodLabel: Record<SalePaymentMethod, string> = { cash: "Cash", card: "Card", bank_transfer: "Bank transfer", other: "Other" };
+
+/** The methods offered at the till, in the order they appear. */
+export const saleMethods: readonly SalePaymentMethod[] = ["cash", "card", "bank_transfer", "other"];
+
+/** The core accepts a payment reference of at most this many characters. */
+export const MAX_REFERENCE = 80;
+
+/** One payment line. Only a bank transfer carries a reference, and an empty one is left out. */
+export function buildPayment(method: SalePaymentMethod, amountMinor: number, reference = ""): PaymentInput {
+  const ref = reference.trim().slice(0, MAX_REFERENCE);
+  return method === "bank_transfer" && ref !== "" ? { method, amountMinor, reference: ref } : { method, amountMinor };
+}
 
 export interface PaymentSummary {
   /** Everything entered so far. */
@@ -35,8 +47,8 @@ export function summarizePayments(totalMinor: number, payments: PaymentInput[]):
       ok: false,
       problem:
         cash === 0
-          ? "Card and other payments cannot be more than what is left to pay. Change can only be given from cash."
-          : "Too much was entered. Change can only be given from the cash handed over, so lower the card or other amount.",
+          ? "Card, bank transfer and other payments cannot be more than what is left to pay. Change can only be given from cash."
+          : "Too much was entered. Change can only be given from the cash handed over, so lower the card, bank transfer or other amount.",
     };
   }
   return { paidMinor: paid, remainingMinor: 0, changeMinor: change, ok: true, problem: null };

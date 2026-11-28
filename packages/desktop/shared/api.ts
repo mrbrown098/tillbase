@@ -128,6 +128,206 @@ export interface ProductCsvReport {
   nothingWritten: boolean;
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Contract for the first-customer backend work (refunds, audit trail, day-close report, bank transfer).
+// These are types only. The API methods that use them are added, with their handlers and tests, in the
+// pull request that builds each feature, so nothing here can be called yet. Money is integer minor units.
+// ---------------------------------------------------------------------------------------------------------
+
+/** How money is handed back on a refund. Wallet and account (khata) sales cannot be part-refunded. */
+export type RefundMethod = "cash" | "card" | "bank_transfer" | "other";
+
+/** One line of a refund: a line of the original sale and how much of it comes back. */
+export interface RefundLineInput {
+  saleItemId: string;
+  /** Quantity coming back. Must be above 0 and no more than what is left unrefunded on that line. */
+  qty: number;
+}
+
+export interface RefundInput {
+  saleId: string;
+  lines: RefundLineInput[];
+  /** Required. Shown in the audit trail and the day-close report. */
+  reason: string;
+  /** Put the goods back in stock (at the cost they were sold at). False when they cannot be resold. */
+  restock: boolean;
+  method: RefundMethod;
+  /** For a bank transfer: the transaction number or note. */
+  reference?: string | null;
+  /** Created by the screen once per attempt, so a double click cannot refund twice. */
+  requestId?: string;
+}
+
+export interface RefundLine {
+  saleItemId: string;
+  productId: string;
+  name: string;
+  qty: number;
+  /** What this line returns to the customer, tax included. */
+  amountMinor: number;
+  /** The tax part of `amountMinor`. */
+  taxMinor: number;
+  restocked: boolean;
+}
+
+export interface Refund {
+  id: string;
+  saleId: string;
+  receiptNo: string;
+  /** The shift that was open when the refund was made (not necessarily the shift of the sale). */
+  shiftId: string | null;
+  userId: string;
+  userName: string;
+  reason: string;
+  method: RefundMethod;
+  reference: string | null;
+  restock: boolean;
+  /** Total handed back, tax included. */
+  amountMinor: number;
+  taxMinor: number;
+  lines: RefundLine[];
+  createdAt: string;
+}
+
+/** What the audit trail records. New kinds may be added; screens must show an unknown kind as plain text. */
+export type AuditAction =
+  | "sale.void"
+  | "sale.refund"
+  | "sale.discount"
+  | "product.price"
+  | "stock.adjust"
+  | "user.create"
+  | "user.update"
+  | "user.pin_reset"
+  | "settings.update"
+  | "backup.restore"
+  | "login.failed"
+  | "shift.close";
+
+export interface AuditEntry {
+  /** Rises with every entry; entries are never changed or removed. */
+  seq: number;
+  at: string;
+  /** Who did it. Null for something with no signed-in person, such as a failed sign-in. */
+  userId: string | null;
+  userName: string | null;
+  action: AuditAction | (string & {});
+  /** What it was done to, e.g. "sale", "product", "user", "settings". */
+  entity: string;
+  entityId: string | null;
+  /** One plain sentence. Never contains a PIN. */
+  summary: string;
+  /** Before and after values and amounts, where there are any. */
+  detail: Record<string, unknown> | null;
+}
+
+export interface AuditQuery {
+  /** Business days, YYYY-MM-DD, inclusive. */
+  from?: string;
+  to?: string;
+  action?: string;
+  userId?: string;
+  /** Newest first. Default 200, most 1000. */
+  limit?: number;
+  /** Return entries older than this `seq`, to page backwards. */
+  beforeSeq?: number;
+}
+
+/** What is left to refund on one line of a sale. */
+export interface RefundableLine {
+  saleItemId: string;
+  productId: string;
+  name: string;
+  qty: number;
+  refundedQty: number;
+  remainingQty: number;
+  /** The whole line, tax included, after its own discount. */
+  lineTotalMinor: number;
+  /** What the remaining quantity would hand back, tax included. */
+  remainingMinor: number;
+}
+
+export interface RefundableSale {
+  saleId: string;
+  receiptNo: string;
+  /** False when the sale cannot be part-refunded; `blockedReason` says why in plain words. */
+  allowed: boolean;
+  blockedReason: string | null;
+  lines: RefundableLine[];
+  refunds: Refund[];
+}
+
+/** One shift as it appears on the day-close report. Cash figures for a closed shift never change afterwards. */
+export interface DayCloseShift {
+  shiftId: string;
+  userName: string;
+  status: "open" | "closed";
+  openedAt: string;
+  closedAt: string | null;
+  openingCashMinor: number;
+  cashSalesMinor: number;
+  cashInMinor: number;
+  cashOutMinor: number;
+  /** Cash handed back to customers during this shift for sales or refunds. Part of `cashOutMinor`. */
+  refundCashOutMinor: number;
+  expectedCashMinor: number;
+  /** Null while the shift is open. */
+  countedCashMinor: number | null;
+  varianceMinor: number | null;
+  note: string | null;
+}
+
+/** All the figures for one business day, computed in the core. Screens only lay them out. */
+export interface DayCloseReport {
+  /** The business day, YYYY-MM-DD. */
+  date: string;
+  /** The UTC instants the day covers: `from` inclusive, `to` exclusive. */
+  from: string;
+  to: string;
+  generatedAt: string;
+
+  salesCount: number;
+  /** Items at list price before discounts. */
+  grossSalesMinor: number;
+  discountsMinor: number;
+  taxMinor: number;
+  /** Total billed on completed sales, tax included, before refunds. */
+  billedMinor: number;
+  voidCount: number;
+  voidedMinor: number;
+  /** Sales rung on an earlier day and voided during this one. They come off this day, not the day they were rung. */
+  earlierSaleVoids: { count: number; amountMinor: number };
+  refundCount: number;
+  refundedMinor: number;
+  /** `billedMinor` minus `refundedMinor` minus the earlier-day voids. */
+  netTakingsMinor: number;
+
+  /** Money actually received, by method, after change given and refunds paid out. */
+  receivedByMethod: { cash: number; card: number; bank_transfer: number; other: number };
+  /** The part of bills put on a customer's account (khata). Income, but not received. */
+  onAccountMinor: number;
+  refundsByMethod: { cash: number; card: number; bank_transfer: number; other: number };
+
+  shifts: DayCloseShift[];
+  /** Totals across `shifts`. */
+  cash: {
+    openingMinor: number;
+    salesMinor: number;
+    inMinor: number;
+    outMinor: number;
+    expectedMinor: number;
+    /** Null if any shift is still open. */
+    countedMinor: number | null;
+    varianceMinor: number | null;
+  };
+
+  /** Null unless the signed-in person may see profit (`finance.view`). */
+  profit: { cogsMinor: number; grossProfitMinor: number; costMissing: boolean } | null;
+
+  /** Plain sentences the owner should read before closing: open shifts, missing costs, sales voided after their shift closed. */
+  warnings: string[];
+}
+
 /**
  * Everything the user interface may ask the app to do. The main process
  * implements it over @tillbase/core and checks the signed-in user's
@@ -164,6 +364,15 @@ export interface TillbaseApi {
   recentSales(limit?: number): Promise<Sale[]>;
   receiptText(saleId: string): Promise<string>;
   voidSale(saleId: string, reason: string): Promise<Sale>;
+  /** Manager or owner. The money comes out of the open shift; closed shifts are never changed. */
+  refundSale(input: RefundInput): Promise<Refund>;
+  /** What is left to refund on a sale and why a sale cannot be part-refunded. */
+  refundableSale(saleId: string): Promise<RefundableSale>;
+  recentRefunds(limit?: number): Promise<Refund[]>;
+  /** Owner only. Newest first. */
+  listAudit(query?: AuditQuery): Promise<AuditEntry[]>;
+  /** Everything for one business day, computed in the core. Profit is null unless the user has `finance.view`. Needs `reports.view`. */
+  dayCloseReport(date: string): Promise<DayCloseReport>;
 
   // Shifts and cash
   openShift(openingCashMinor: number): Promise<SessionInfo>;
@@ -320,6 +529,8 @@ export interface TillbaseApi {
   /** Where receipts go (any signed-in user can read it, so screens know whether to print by themselves). */
   getPrinter(): Promise<PrinterConfig>;
   setPrinter(config: Partial<PrinterConfig>): Promise<PrinterConfig>;
+  /** Printers installed on this computer (needs `settings.manage`). Empty when the list cannot be read. */
+  listSystemPrinters(): Promise<{ name: string; isDefault: boolean }[]>;
   /** Print a sale's receipt (with the shop logo). Opens the cash drawer when the printer is set to and the sale took cash. */
   printReceipt(saleId: string): Promise<PrintResult>;
   printKitchenTicket(ticket: KitchenTicket): Promise<PrintResult>;
@@ -364,7 +575,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "checkout",
   "recentSales",
   "receiptText",
-  "voidSale",
+  "voidSale","refundSale","refundableSale","recentRefunds","listAudit","dayCloseReport",
   "openShift",
   "shiftSummary",
   "cashMovement",
@@ -399,6 +610,6 @@ export const channels: (keyof TillbaseApi)[] = [
   "resetPin",
   "changeOwnPin",
   "chooseProductCsv","productCsvTemplate","exportProductCsv","saveCsvFile","previewProductCsv","importProductCsv",
-  "getPrinter","setPrinter","printReceipt","printKitchenTicket","printStatement","printTestPage","openCashDrawer",
+  "getPrinter","setPrinter","listSystemPrinters","printReceipt","printKitchenTicket","printStatement","printTestPage","openCashDrawer",
   "getBusinessProfile","saveBusinessProfile","beginOnboarding","finishOnboarding","restartOnboarding",
 ];

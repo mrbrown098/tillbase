@@ -1,0 +1,76 @@
+name: Create release tag
+
+# Manual. Creates the version tag (for example v0.6.0) on the exact commit you name, then starts the Release
+# workflow for that tag. Use it when you cannot push a tag yourself. Nothing is published: the Release workflow
+# only makes a DRAFT release for a person to publish.
+#
+# A tag pushed with the built-in token does not start other workflows by itself, so the last step starts the
+# Release workflow on the new tag explicitly.
+#
+# It refuses to run unless: it is started from main by the repository owner, main is at the commit you typed,
+# every package.json says the version you typed, and the tag does not exist yet. It never moves or deletes a tag.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the v, for example 0.6.0"
+        required: true
+        type: string
+      commit:
+        description: "The full 40-character commit SHA that main must be at"
+        required: true
+        type: string
+
+permissions:
+  contents: write # push the tag
+  actions: write # start the Release workflow
+
+concurrency:
+  group: create-release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Create tag and start Release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check the inputs and the repository state
+        env:
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Version must look like 0.6.0"; exit 1; }
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Commit must be the full 40-character SHA"; exit 1; }
+          head="$(git rev-parse HEAD)"
+          [ "$head" = "$COMMIT" ] || { echo "::error::main is at $head, not the commit you named ($COMMIT). Nothing was tagged."; exit 1; }
+          for f in package.json packages/core/package.json packages/desktop/package.json; do
+            v="$(node -p "require('./$f').version")"
+            [ "$v" = "$VERSION" ] || { echo "::error file=$f::$f says $v, not $VERSION. Nothing was tagged."; exit 1; }
+          done
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag v$VERSION already exists. It is never moved or replaced."; exit 1
+          fi
+          echo "OK: main is at $COMMIT, all package.json files say $VERSION, tag v$VERSION is free."
+      - name: Create the annotated tag
+        env:
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" "$COMMIT" -m "Tillbase $VERSION"
+          git push origin "refs/tags/v$VERSION"
+          remote="$(git ls-remote origin "refs/tags/v$VERSION^{}" | cut -f1)"
+          [ "$remote" = "$COMMIT" ] || { echo "::error::The remote tag points to $remote, expected $COMMIT"; exit 1; }
+          echo "Tag v$VERSION points to $COMMIT."
+      - name: Start the Release workflow on the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: gh workflow run release.yml --ref "v$VERSION" --repo "$GITHUB_REPOSITORY"

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { openDatabase } from "@tillbase/core";
+import { dates, openDatabase } from "@tillbase/core";
 import { createHandlers } from "../electron/handlers";
 import type { TillbaseApi } from "../shared/api";
 
@@ -325,5 +325,150 @@ describe("staff management", () => {
     const json = JSON.stringify([await api.listStaff(), await api.loginUsers(), await api.session()]);
     expect(json).not.toContain("4321");
     expect(json).not.toMatch(/pin_hash|pin_salt|pinHash/);
+  });
+});
+
+describe("bank transfer and repeated checkouts", () => {
+  it("takes a bank transfer that leaves the drawer alone, and a double click sells once", async () => {
+    await ready();
+    const p = await api.createProduct({ name: "Samosa", priceMinor: 5_000, taxRateBp: 0, trackStock: false });
+    const input = { lines: [{ productId: p.id, qty: 2 }], payments: [{ method: "bank_transfer" as const, amountMinor: 10_000, reference: "IBFT 7781" }], requestId: "pos-click-0001" };
+    // a double click: two calls before the screen has had its answer
+    const [a, b] = await Promise.all([api.checkout(input), api.checkout(input)]);
+    expect(b.sale.id).toBe(a.sale.id);
+    expect(a.sale.payments[0]).toMatchObject({ method: "bank_transfer", reference: "IBFT 7781" });
+    expect(await api.recentSales(10)).toHaveLength(1);
+    const sum = await api.shiftSummary();
+    expect(sum.byMethod).toEqual({ bank_transfer: 10_000 });
+    expect(sum.expectedCashMinor).toBe(10_000); // the float only
+  });
+});
+
+describe("refunds", () => {
+  it("is for managers and owners, needs an open shift, and takes cash from today's drawer", async () => {
+    await ready();
+    const p = await api.createProduct({ name: "Tea", priceMinor: 10_000, taxRateBp: 0, trackStock: false });
+    const { sale } = await api.checkout({ lines: [{ productId: p.id, qty: 2 }], payments: [{ method: "cash", amountMinor: 20_000 }] });
+    const line = sale.items[0]!.id;
+    const input = { saleId: sale.id, lines: [{ saleItemId: line, qty: 1 }], reason: "customer changed mind", restock: false, method: "cash" as const };
+
+    const cashier = await makeStaff("Ali", "cashier");
+    const manager = await makeStaff("Mona", "manager", "3333");
+    await api.logout();
+    await api.login(cashier.id, cashier.pin);
+    await expect(api.refundSale(input)).rejects.toThrow(/permission/);
+    await expect(api.refundableSale(sale.id)).rejects.toThrow(/permission/);
+    await api.logout();
+
+    // a manager is allowed, but only while a shift is open
+    await api.login(manager.id, manager.pin);
+    await api.closeShift(30_000);
+    await expect(api.refundSale(input)).rejects.toThrow(/shift/i);
+    await api.openShift(20_000);
+    await expect(api.refundSale(input)).resolves.toMatchObject({ amountMinor: 10_000, userName: "Mona" });
+  });
+
+  it("a manager refunds from the open shift; a void of an earlier shift's sale is recorded as cash out", async () => {
+    await ready();
+    const p = await api.createProduct({ name: "Tea", priceMinor: 10_000, taxRateBp: 0, trackStock: false });
+    const a = await api.checkout({ lines: [{ productId: p.id, qty: 2 }], payments: [{ method: "cash", amountMinor: 20_000 }] });
+    const b = await api.checkout({ lines: [{ productId: p.id, qty: 1 }], payments: [{ method: "cash", amountMinor: 10_000 }] });
+    const refund = await api.refundSale({ saleId: a.sale.id, lines: [{ saleItemId: a.sale.items[0]!.id, qty: 1 }], reason: "cold", restock: false, method: "cash" });
+    expect(refund).toMatchObject({ amountMinor: 10_000, method: "cash", userName: "Boss" });
+    const open = await api.shiftSummary();
+    expect(open).toMatchObject({ refundCashOutMinor: 10_000, expectedCashMinor: 10_000 + 30_000 - 10_000 });
+    expect((await api.refundableSale(a.sale.id)).lines[0]).toMatchObject({ remainingQty: 1 });
+    expect(await api.recentRefunds()).toHaveLength(1);
+    await expect(api.voidSale(a.sale.id, "oops")).rejects.toThrow(/already been refunded/);
+
+    // close the shift, open a new one, and void the other sale: the cash goes out of the new drawer, the old shift is untouched
+    const closed = await api.closeShift(40_000 - 10_000 + 10_000 - 10_000 + 0);
+    const frozen = JSON.stringify(await api.shiftSummary(closed.shift.id));
+    await api.openShift(50_000);
+    await api.voidSale(b.sale.id, "rung twice");
+    expect(JSON.stringify(await api.shiftSummary(closed.shift.id))).toBe(frozen);
+    expect(await api.shiftSummary()).toMatchObject({ cashOutMinor: 10_000, refundCashOutMinor: 10_000, expectedCashMinor: 40_000 });
+  });
+});
+
+describe("audit trail", () => {
+  it("records voids, refunds, discounts, price and stock changes, staff and settings changes, shift close and failed sign-ins; only the owner can read it", async () => {
+    await ready();
+    const ownerId = (await api.loginUsers()).find((u) => u.name === "Boss")!.id;
+    const ownerPin = "1111";
+    const p = await api.createProduct({ name: "Tea", priceMinor: 10_000, taxRateBp: 0 }, 20);
+    const a = await api.checkout({ lines: [{ productId: p.id, qty: 2, discountMinor: 1_000 }], payments: [{ method: "cash", amountMinor: 19_000 }] });
+    const b = await api.checkout({ lines: [{ productId: p.id, qty: 1 }], payments: [{ method: "cash", amountMinor: 10_000 }] });
+    await api.refundSale({ saleId: a.sale.id, lines: [{ saleItemId: a.sale.items[0]!.id, qty: 1 }], reason: "cold", restock: true, method: "cash" });
+    await api.voidSale(b.sale.id, "rung twice");
+    await api.updateProduct(p.id, { priceMinor: 12_000 });
+    await api.adjustStock(p.id, -2, "spilled");
+    const staff = await makeStaff("Ali", "cashier", "4455");
+    await api.updateStaff(staff.id, { role: "manager" });
+    await api.resetPin(staff.id, "7788");
+    await api.updateSettings({ storeName: "Tea House" });
+    await api.cashMovement(-500, "milk");
+    await api.closeShift(0, "counted twice");
+    await api.logout();
+    await expect(api.login(staff.id, "0000")).rejects.toThrow(/Wrong PIN/);
+    await api.login(staff.id, "7788");
+    await expect(api.listAudit()).rejects.toThrow(/permission/);
+    await api.logout();
+    await api.login(ownerId, ownerPin);
+
+    const log = await api.listAudit({ limit: 500 });
+    const kinds = log.map((e) => e.action);
+    for (const k of ["stock.adjust", "sale.discount", "sale.refund", "sale.void", "product.price", "user.create", "user.update", "user.pin_reset", "settings.update", "cash.movement", "shift.close", "login.failed"]) {
+      expect(kinds, k).toContain(k);
+    }
+    const failed = log.find((e) => e.action === "login.failed")!;
+    expect(failed).toMatchObject({ userId: null, entityId: staff.id });
+    expect(log.find((e) => e.action === "sale.void")).toMatchObject({ userName: "Boss", detail: expect.objectContaining({ reason: "rung twice" }) });
+    expect(log.find((e) => e.action === "product.price")!.detail).toMatchObject({ priceMinor: { from: 10_000, to: 12_000 } });
+    expect(log.find((e) => e.action === "shift.close")!.detail).toMatchObject({ countedMinor: 0 });
+    // no PIN is ever written, old or new
+    const text = JSON.stringify(log);
+    for (const pin of ["4455", "7788", "0000", ownerPin]) expect(text).not.toContain(`"${pin}"`);
+    expect(text).not.toMatch(/pin_hash|pinHash|salt/i);
+  });
+
+  it("a failed action leaves no entry, and a repeated checkout is noted once", async () => {
+    await ready();
+    const p = await api.createProduct({ name: "Tea", priceMinor: 10_000, taxRateBp: 0, trackStock: false });
+    await expect(api.voidSale("no-such-sale", "x")).rejects.toThrow();
+    await expect(api.refundSale({ saleId: "no-such-sale", lines: [{ saleItemId: "x", qty: 1 }], reason: "r", restock: false, method: "cash" })).rejects.toThrow();
+    const input = { lines: [{ productId: p.id, qty: 1, discountMinor: 500 }], payments: [{ method: "cash" as const, amountMinor: 9_500 }], requestId: "discount-req-1" };
+    await api.checkout(input);
+    await api.checkout(input);
+    const log = await api.listAudit({ limit: 500 });
+    expect(log.filter((e) => e.action === "sale.void" || e.action === "sale.refund")).toHaveLength(0);
+    expect(log.filter((e) => e.action === "sale.discount")).toHaveLength(1);
+  });
+});
+
+describe("day-close report", () => {
+  it("is computed by the core, hides profit from managers, and is closed to cashiers", async () => {
+    await ready();
+    const p = await api.createProduct({ name: "Tea", priceMinor: 10_000, taxRateBp: 0, trackStock: false });
+    await api.checkout({ lines: [{ productId: p.id, qty: 2 }], payments: [{ method: "bank_transfer", amountMinor: 20_000, reference: "TX-1" }] });
+    const today = dates.localDate();
+    const owner = await api.dayCloseReport(today);
+    expect(owner).toMatchObject({ salesCount: 1, billedMinor: 20_000, netTakingsMinor: 20_000, receivedByMethod: { bank_transfer: 20_000, cash: 0 } });
+    expect(owner.profit).not.toBeNull();
+    expect(owner.shifts[0]).toMatchObject({ status: "open", openingCashMinor: 10_000 });
+    expect(owner.warnings.join(" ")).toMatch(/still open/);
+
+    const mgr = await makeStaff("Mo", "manager");
+    const cashier = await makeStaff("Cy", "cashier");
+    await api.logout();
+    await api.login(mgr.id, mgr.pin);
+    const asManager = await api.dayCloseReport(today);
+    expect(asManager.profit).toBeNull();
+    expect(asManager.billedMinor).toBe(20_000);
+    await api.logout();
+    await api.login(cashier.id, cashier.pin);
+    await expect(api.dayCloseReport(today)).rejects.toThrow(/permission/);
+    await api.logout();
+    await expect(api.dayCloseReport(today)).rejects.toThrow(/sign in/);
   });
 });

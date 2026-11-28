@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizePayments } from "../renderer/src/payments";
+import { MAX_REFERENCE, buildPayment, methodLabel, saleMethods, summarizePayments } from "../renderer/src/payments";
 
 const cash = (n: number) => ({ method: "cash" as const, amountMinor: n });
 const card = (n: number) => ({ method: "card" as const, amountMinor: n });
@@ -49,5 +49,33 @@ describe("summarizePayments (the split-payment rules shown in the pay screen)", 
     expect(summarizePayments(500, [cash(100), card(401)]).ok).toBe(true);
     // 0 cash: any change is refused.
     expect(summarizePayments(500, [card(501)]).ok).toBe(false);
+  });
+});
+
+describe("bank transfer at the till", () => {
+  const bank = (n: number) => ({ method: "bank_transfer" as const, amountMinor: n });
+
+  it("is offered after card and before other, with a plain label", () => {
+    expect(saleMethods).toEqual(["cash", "card", "bank_transfer", "other"]);
+    expect(methodLabel.bank_transfer).toBe("Bank transfer");
+  });
+
+  it("follows the same rule as card: it covers the bill but never produces change", () => {
+    expect(summarizePayments(500, [cash(200), bank(300)])).toEqual({ paidMinor: 500, remainingMinor: 0, changeMinor: 0, ok: true, problem: null });
+    const over = summarizePayments(500, [bank(600)]);
+    expect(over.ok).toBe(false);
+    expect(over.problem).toMatch(/bank transfer/i);
+    expect(over.problem).toMatch(/Change can only be given from cash/);
+    const mixed = summarizePayments(500, [cash(10), bank(600)]);
+    expect(mixed.ok).toBe(false);
+    expect(mixed.problem).toMatch(/lower the card, bank transfer or other amount/);
+  });
+
+  it("keeps the reference only on a bank transfer, trimmed, and leaves an empty one out", () => {
+    expect(buildPayment("bank_transfer", 500, "  TX 8841 ")).toEqual({ method: "bank_transfer", amountMinor: 500, reference: "TX 8841" });
+    expect(buildPayment("bank_transfer", 500, "   ")).toEqual({ method: "bank_transfer", amountMinor: 500 });
+    expect(buildPayment("bank_transfer", 500)).toEqual({ method: "bank_transfer", amountMinor: 500 });
+    expect(buildPayment("card", 500, "left over from a transfer")).toEqual({ method: "card", amountMinor: 500 });
+    expect(buildPayment("bank_transfer", 500, "x".repeat(200)).reference).toHaveLength(MAX_REFERENCE);
   });
 });
