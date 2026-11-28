@@ -36,6 +36,8 @@ export type { User } from "./users.js";
 export { can, permissionsOf, roles } from "./permissions.js";
 export type { Permission, Role } from "./permissions.js";
 export { ShiftService } from "./shifts.js";
+export { AuditService, flushPendingAudit, queueAuditAfterRestore } from "./audit.js";
+export type { AuditEntry, AuditInput, AuditQuery } from "./audit.js";
 export { RefundService } from "./refunds.js";
 export type { Refund, RefundInput, RefundLine, RefundLineInput, RefundMethod, RefundableLine, RefundableSale, RefundContext } from "./refunds.js";
 export type { Shift, ShiftSummary } from "./shifts.js";

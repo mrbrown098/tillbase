@@ -353,6 +353,8 @@ export interface TillbaseApi {
   /** What is left to refund on a sale and why a sale cannot be part-refunded. */
   refundableSale(saleId: string): Promise<RefundableSale>;
   recentRefunds(limit?: number): Promise<Refund[]>;
+  /** Owner only. Newest first. */
+  listAudit(query?: AuditQuery): Promise<AuditEntry[]>;
 
   // Shifts and cash
   openShift(openingCashMinor: number): Promise<SessionInfo>;
@@ -544,7 +546,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "checkout",
   "recentSales",
   "receiptText",
-  "voidSale","refundSale","refundableSale","recentRefunds",
+  "voidSale","refundSale","refundableSale","recentRefunds","listAudit",
   "openShift",
   "shiftSummary",
   "cashMovement",

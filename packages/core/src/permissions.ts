@@ -12,6 +12,7 @@ export type Permission =
   | "shifts.manage_all"
   | "users.manage"
   | "settings.manage"
+  | "audit.view"
   | "purchases.manage"
   | "expenses.manage"
   | "attendance.manage"
@@ -44,7 +45,7 @@ const manager: Permission[] = [
 ];
 
 // Profit figures and payroll are the owner's business: wages and margins are private.
-const owner: Permission[] = [...manager, "users.manage", "settings.manage", "finance.view", "labour.manage", "customers.view_spend"];
+const owner: Permission[] = [...manager, "users.manage", "settings.manage", "audit.view", "finance.view", "labour.manage", "customers.view_spend"];
 
 const grants: Record<Role, ReadonlySet<Permission>> = {
   cashier: new Set(cashier),

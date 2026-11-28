@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BackupManager, openDatabase, SettingsService } from "@tillbase/core";
+import { BackupManager, flushPendingAudit, openDatabase, SettingsService } from "@tillbase/core";
 import { channels, type IpcResult, type TillbaseApi } from "../shared/api.js";
 import { createAdService } from "./ads.js";
 import { createFileDialogs } from "./files.js";
@@ -71,6 +71,8 @@ void app.whenReady().then(() => {
   const path = databasePath();
   console.log(`Tillbase data file: ${path}`);
   const db = openDatabase(path);
+  // A restore leaves a note for the restored data; write it now that the restored file is open.
+  if (path !== ":memory:") flushPendingAudit(db, path);
   // Daily copies of the shop's data, kept next to it and, if the owner chose one, in a second place too.
   // Skipped for in-memory test databases.
   const backups = new BackupManager(db, { dbPath: path });
@@ -91,7 +93,7 @@ void app.whenReady().then(() => {
   const ads = createAdService({ openExternal, enabled: () => settingsReader.get().showSponsors });
   const updates = createUpdateChecker({ currentVersion: app.getVersion(), openExternal });
   registerIpc(
-    createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, afterShiftClose: quietBackup, files, ads, updates, appVersion: app.getVersion() }),
+    createHandlers(db, "T1", Date.now, { backup, backups, afterRestore, dbPath: path, afterShiftClose: quietBackup, files, ads, updates, appVersion: app.getVersion() }),
   );
   createWindow();
 
