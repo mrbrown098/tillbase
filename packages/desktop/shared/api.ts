@@ -293,9 +293,11 @@ export interface DayCloseReport {
   billedMinor: number;
   voidCount: number;
   voidedMinor: number;
+  /** Sales rung on an earlier day and voided during this one. They come off this day, not the day they were rung. */
+  earlierSaleVoids: { count: number; amountMinor: number };
   refundCount: number;
   refundedMinor: number;
-  /** `billedMinor` minus `refundedMinor`. */
+  /** `billedMinor` minus `refundedMinor` minus the earlier-day voids. */
   netTakingsMinor: number;
 
   /** Money actually received, by method, after change given and refunds paid out. */
@@ -355,6 +357,8 @@ export interface TillbaseApi {
   recentRefunds(limit?: number): Promise<Refund[]>;
   /** Owner only. Newest first. */
   listAudit(query?: AuditQuery): Promise<AuditEntry[]>;
+  /** Everything for one business day, computed in the core. Profit is null unless the user has `finance.view`. Needs `reports.view`. */
+  dayCloseReport(date: string): Promise<DayCloseReport>;
 
   // Shifts and cash
   openShift(openingCashMinor: number): Promise<SessionInfo>;
@@ -546,7 +550,7 @@ export const channels: (keyof TillbaseApi)[] = [
   "checkout",
   "recentSales",
   "receiptText",
-  "voidSale","refundSale","refundableSale","recentRefunds","listAudit",
+  "voidSale","refundSale","refundableSale","recentRefunds","listAudit","dayCloseReport",
   "openShift",
   "shiftSummary",
   "cashMovement",

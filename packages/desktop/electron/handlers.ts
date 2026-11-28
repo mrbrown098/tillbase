@@ -3,6 +3,7 @@ import {
   BackupManager,
   AccountingExportService,
   ExpenseService,
+  DayCloseService,
   FinanceService,
   InventoryService,
   BusinessProfileService,
@@ -111,6 +112,7 @@ export function createHandlers(
   const expenses = new ExpenseService(db);
   const labour = new LabourService(db);
   const finance = new FinanceService(db);
+  const dayClose = new DayCloseService(db);
   const accounting = new AccountingExportService(db);
   const orders = new OrderService(db, receiptPrefix);
   const productCsv = new ProductCsvService(db);
@@ -880,6 +882,11 @@ export function createHandlers(
     },
 
     // ---- Money in and out -----------------------------------------------
+    async dayCloseReport(date) {
+      const user = authorize("reports.view");
+      return dayClose.report(date, { includeProfit: can(user.role, "finance.view") });
+    },
+
     async profitAndLoss(from, to) {
       authorize("finance.view");
       return finance.profitAndLoss(from, to);
